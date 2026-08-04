@@ -697,14 +697,28 @@ export function BookmarksClient({
     let newOrder = targetFolderBookmarks.length;
     if (targetBookmarkId) {
       const targetIdx = targetFolderBookmarks.findIndex(b => b.id === targetBookmarkId);
-      newOrder = targetIdx >= 0 ? targetIdx : targetFolderBookmarks.length;
+      if (targetIdx >= 0) {
+        newOrder = targetIdx;
+      }
     }
 
-    setBookmarks(prev =>
-      prev.map(b => (b.id === draggedId ? { ...b, folder_id: targetFolderId, order: newOrder } : b))
-    );
+    // Splice the dragged item into the new position
+    targetFolderBookmarks.splice(newOrder, 0, { ...bmToMove, folder_id: targetFolderId });
 
-    await supabase.from('bookmarks').update({ folder_id: targetFolderId, order: newOrder }).eq('id', draggedId);
+    // Update orders for the entire target folder
+    const updatedTargetBookmarks = targetFolderBookmarks.map((b, idx) => ({ ...b, order: idx }));
+
+    setBookmarks(prev => {
+      const otherBookmarks = prev.filter(b => b.folder_id !== targetFolderId && b.id !== draggedId);
+      return [...otherBookmarks, ...updatedTargetBookmarks];
+    });
+
+    // Async update to DB
+    Promise.all(
+      updatedTargetBookmarks.map(b => 
+        supabase.from('bookmarks').update({ folder_id: targetFolderId, order: b.order }).eq('id', b.id)
+      )
+    ).catch(err => console.error("Error updating bookmarks order:", err));
   };
 
   const handleDropFolderOnBoard = async (e: React.DragEvent, targetBoardId: string) => {
