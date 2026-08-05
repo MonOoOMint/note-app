@@ -101,18 +101,22 @@ export function EditTodoModal({
               <label className="relative flex items-center space-x-1.5 text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer overflow-hidden">
                 <Calendar size={16} className="shrink-0 z-10 pointer-events-none text-zinc-500" />
                 {dueDate ? (
-                  <div className="flex items-center gap-1.5 z-10">
+                  <div className="flex items-center gap-1.5 z-10 relative">
+                    <span className="text-sm font-medium z-10 pointer-events-none text-zinc-900 dark:text-zinc-100">
+                      {dueDate.split('-').reverse().join('/')}
+                    </span>
                     <input 
                       type="date" 
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="bg-transparent text-sm outline-none cursor-pointer text-zinc-900 dark:text-zinc-100 font-medium"
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20"
+                      style={{ WebkitAppearance: 'none' }}
                       onClick={(e) => 'showPicker' in HTMLInputElement.prototype && (e.currentTarget as any).showPicker()}
                     />
                     <button 
                       type="button" 
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDueDate(""); }}
-                      className="hover:text-red-500 rounded-full p-0.5 transition-colors text-zinc-400"
+                      className="hover:text-red-500 rounded-full p-0.5 transition-colors text-zinc-400 relative z-30"
                     >
                       <X size={14} />
                     </button>

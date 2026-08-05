@@ -66,18 +66,22 @@ export function TodoInput({
             <label className="relative flex items-center space-x-1.5 text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors cursor-pointer overflow-hidden">
               <Calendar size={14} className="shrink-0 z-10 pointer-events-none" />
               {dueDate ? (
-                <div className="flex items-center gap-1.5 z-10">
+                <div className="flex items-center gap-1.5 z-10 relative">
+                  <span className="text-xs font-medium z-10 pointer-events-none text-zinc-900 dark:text-zinc-100">
+                    {dueDate.split('-').reverse().join('/')}
+                  </span>
                   <input 
                     type="date" 
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="bg-transparent text-xs outline-none cursor-pointer text-zinc-900 dark:text-zinc-100"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20"
+                    style={{ WebkitAppearance: 'none' }}
                     onClick={(e) => 'showPicker' in HTMLInputElement.prototype && (e.currentTarget as any).showPicker()}
                   />
                   <button 
                     type="button" 
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDueDate(""); }}
-                    className="hover:text-red-500 rounded-full p-0.5 transition-colors"
+                    className="hover:text-red-500 rounded-full p-0.5 transition-colors relative z-30"
                   >
                     <X size={12} />
                   </button>
