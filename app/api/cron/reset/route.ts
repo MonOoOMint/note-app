@@ -40,91 +40,89 @@ export async function GET(request: Request) {
       greetingTitle = "Nhắc nhở công việc! 🌙";
     }
 
-    // 2. Lấy tất cả task lặp lại đã hoàn thành (chỉ áp dụng cho todo, bỏ qua checklist)
-    const { data: todos, error: todosError } = await supabase
+    // --- PHASE 1: RESET RECURRING TASKS ---
+    const { data: todosToResetData, error: fetchError } = await supabase
       .from('todos')
-      .select('*')
+      .select('id, recurrence, weekly_days')
       .eq('is_done', true)
       .neq('recurrence', 'none');
 
-    if (todosError) throw todosError;
-    if (!todos || todos.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'No tasks to reset',
-        vnTime: `${vnHour}:${vnDate.getMinutes().toString().padStart(2, '0')}`,
-        greeting: greetingTitle
+    let resetCount = 0;
+    if (todosToResetData && todosToResetData.length > 0 && !fetchError) {
+      // Lọc các task cần reset hôm nay theo lịch Việt Nam
+      const tasksToReset = todosToResetData.filter(todo => {
+        if (todo.recurrence === 'daily') return true;
+        if (todo.recurrence === 'weekly' && todo.weekly_days) {
+          return todo.weekly_days.includes(todayDayOfWeek);
+        }
+        return false;
       });
-    }
 
-    // 3. Lọc các task cần reset hôm nay theo lịch Việt Nam
-    const tasksToReset = todos.filter(todo => {
-      if (todo.recurrence === 'daily') return true;
-      if (todo.recurrence === 'weekly' && todo.weekly_days) {
-        return todo.weekly_days.includes(todayDayOfWeek);
+      if (tasksToReset.length > 0) {
+        const taskIds = tasksToReset.map(t => t.id);
+        const { error: updateError } = await supabase
+          .from('todos')
+          .update({ is_done: false, last_completed_at: null })
+          .in('id', taskIds);
+          
+        if (updateError) throw updateError;
+        resetCount = taskIds.length;
       }
-      return false;
-    });
-
-    if (tasksToReset.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'No tasks match today\'s rule',
-        vnTime: `${vnHour}:${vnDate.getMinutes().toString().padStart(2, '0')}`,
-        greeting: greetingTitle
-      });
     }
 
-    const taskIds = tasksToReset.map(t => t.id);
-
-    // 4. Update database: Mở lại các task lặp lại
-    const { error: updateError } = await supabase
-      .from('todos')
-      .update({ is_done: false, last_completed_at: null })
-      .in('id', taskIds);
-      
-    if (updateError) throw updateError;
-
-    // 5. Gom nhóm theo User để gửi thông báo Push Notification
-    const usersToNotify = new Set(tasksToReset.map(t => t.user_id));
-    
+    // --- PHASE 2: SEND NOTIFICATIONS FOR UNCOMPLETED TASKS ---
+    const { data: subs, error: subsError } = await supabase.from('push_subscriptions').select('*');
     let pushCount = 0;
-    
-    for (const userId of Array.from(usersToNotify)) {
-      const userTasksCount = tasksToReset.filter(t => t.user_id === userId).length;
-      
-      // Lấy danh sách thiết bị của user này
-      const { data: subs } = await supabase
-        .from('push_subscriptions')
-        .select('*')
-        .eq('user_id', userId);
+
+    if (subs && subs.length > 0 && !subsError) {
+      // Gom nhóm subscription theo user_id
+      const subsByUser = subs.reduce((acc: any, sub: any) => {
+        if (!acc[sub.user_id]) acc[sub.user_id] = [];
+        acc[sub.user_id].push(sub);
+        return acc;
+      }, {});
+
+      for (const userId of Object.keys(subsByUser)) {
+        // Lấy số lượng công việc CHƯA HOÀN THÀNH (bỏ qua checklist)
+        const { count, error } = await supabase
+          .from('todos')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('is_done', false)
+          .or('type.is.null,type.eq.todo');
         
-      if (!subs || subs.length === 0) continue;
-      
-      const payload = JSON.stringify({
-        title: greetingTitle,
-        body: `Bạn có ${userTasksCount} công việc lặp lại cần hoàn thành hôm nay.`,
-        icon: "/icon512_maskable.png"
-      });
+        if (error) {
+          console.error("Error fetching tasks for user:", userId, error);
+          continue;
+        }
 
-      for (const sub of subs) {
-        const pushSubscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth
-          }
-        };
+        if (count && count > 0) {
+          const payload = JSON.stringify({
+            title: greetingTitle,
+            body: `Bạn đang có ${count} công việc chưa hoàn thành. Hãy kiểm tra nhé!`,
+            icon: "/icon512_maskable.png"
+          });
 
-        try {
-          await webpush.sendNotification(pushSubscription, payload);
-          pushCount++;
-        } catch (error: any) {
-          // Gỡ bỏ token nếu user đã tắt quyền (statusCode 410)
-          if (error.statusCode === 410) {
-            await supabase.from('push_subscriptions').delete().eq('id', sub.id);
-          } else {
-            console.error("Push error:", error);
+          for (const sub of subsByUser[userId]) {
+            const pushSubscription = {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth
+              }
+            };
+
+            try {
+              await webpush.sendNotification(pushSubscription, payload);
+              pushCount++;
+            } catch (error: any) {
+              if (error.statusCode === 410) {
+                // Token hết hạn hoặc user hủy quyền -> Xóa khỏi DB
+                await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+              } else {
+                console.error("Push error:", error);
+              }
+            }
           }
         }
       }
@@ -132,7 +130,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Reset ${tasksToReset.length} tasks and sent ${pushCount} notifications.`,
+      message: `Reset ${resetCount} tasks and sent ${pushCount} notifications.`,
       vnTime: `${vnHour}:${vnDate.getMinutes().toString().padStart(2, '0')}`,
       greeting: greetingTitle
     });
