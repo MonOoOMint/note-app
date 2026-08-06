@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     // --- PHASE 1: RESET RECURRING TASKS ---
     const { data: todosToResetData, error: fetchError } = await supabase
       .from('todos')
-      .select('id, recurrence, weekly_days')
+      .select('id, recurrence, weekly_days, last_completed_at')
       .eq('is_done', true)
       .neq('recurrence', 'none');
 
@@ -51,6 +51,18 @@ export async function GET(request: Request) {
     if (todosToResetData && todosToResetData.length > 0 && !fetchError) {
       // Lọc các task cần reset hôm nay theo lịch Việt Nam
       const tasksToReset = todosToResetData.filter(todo => {
+        if (todo.last_completed_at) {
+          const completedDate = new Date(todo.last_completed_at);
+          const completedVnTimeString = completedDate.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" });
+          const completedVnDate = new Date(completedVnTimeString);
+          
+          if (completedVnDate.getFullYear() === vnDate.getFullYear() && 
+              completedVnDate.getMonth() === vnDate.getMonth() && 
+              completedVnDate.getDate() === vnDate.getDate()) {
+              return false; // Completed today in VN timezone, do not reset
+          }
+        }
+
         if (todo.recurrence === 'daily') return true;
         if (todo.recurrence === 'weekly' && todo.weekly_days) {
           return todo.weekly_days.includes(todayDayOfWeek);
@@ -100,7 +112,7 @@ export async function GET(request: Request) {
           const payload = JSON.stringify({
             title: greetingTitle,
             body: `Bạn đang có ${count} công việc chưa hoàn thành. Hãy kiểm tra nhé!`,
-            icon: "/icon512_maskable.png"
+            icon: "/icon.svg"
           });
 
           for (const sub of subsByUser[userId]) {

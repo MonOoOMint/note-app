@@ -436,6 +436,58 @@ export default function TodosClient({
     }
   };
 
+  // --- CLIENT-SIDE RECURRING TASKS RESET ---
+  useEffect(() => {
+    let hasChanges = false;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    const todayDayOfWeek = now.getDay();
+
+    const updatedTodos = todos.map(t => {
+      if (!t.is_done || !t.recurrence || t.recurrence === "none" || !t.last_completed_at) {
+        return t;
+      }
+      
+      const lastCompletedDate = new Date(t.last_completed_at);
+      const lastCompletedStr = `${lastCompletedDate.getFullYear()}-${lastCompletedDate.getMonth()}-${lastCompletedDate.getDate()}`;
+
+      // If it was completed today, do not reset
+      if (lastCompletedStr === todayStr) {
+        return t;
+      }
+
+      // It was completed on a previous day. Check if we should reset it today.
+      let shouldReset = false;
+
+      if (t.recurrence === "daily") {
+        shouldReset = true;
+      } else if (t.recurrence === "weekly" && t.weekly_days) {
+        if (t.weekly_days.includes(todayDayOfWeek)) {
+          shouldReset = true;
+        }
+      }
+
+      if (shouldReset) {
+        hasChanges = true;
+        // Optimistic update locally, and update supabase
+        supabase.from('todos').update({
+          is_done: false,
+          last_completed_at: null
+        }).eq('id', t.id).then(({error}) => {
+          if(error) console.error("Error resetting recurring task", error);
+        });
+        return { ...t, is_done: false, last_completed_at: null };
+      }
+
+      return t;
+    });
+
+    if (hasChanges) {
+      setTodos(updatedTodos);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="flex h-full w-full relative">
       {/* Desktop Sidebar */}
