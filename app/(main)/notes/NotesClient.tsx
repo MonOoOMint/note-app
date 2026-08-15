@@ -32,6 +32,7 @@ import {
   FileSpreadsheet
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
 import {
   DndContext,
@@ -853,6 +854,25 @@ export function NotesClient({
     setIsGroupModalOpen(false);
   };
 
+  // Tạo nhóm nhanh trực tiếp từ ô Autocomplete
+  const handleCreateGroupOnTheFly = async (name: string): Promise<string | void> => {
+    if (!name.trim()) return;
+    const { data, error } = await supabase
+      .from('note_groups')
+      .insert({
+        user_id: userId,
+        name: name.trim(),
+        order: groups.length
+      })
+      .select()
+      .single();
+
+    if (data && !error) {
+      setGroups(prev => [...prev, data]);
+      return data.id;
+    }
+  };
+
   const handleDeleteGroup = (group: NoteGroup) => {
     setConfirmConfig({
       isOpen: true,
@@ -1338,13 +1358,18 @@ export function NotesClient({
                       <span className="text-xs">{isUploading ? "Đang tải..." : "Đính kèm"}</span>
                     </button>
 
-                    {/* Chọn Nhóm (Custom) */}
-                    <CustomGroupSelect
+                    {/* Chọn Nhóm (Autocomplete Search Box) */}
+                    <AutocompleteSearchBox
                       value={newGroupId}
                       onChange={setNewGroupId}
-                      groups={groups}
+                      items={groups.map(g => ({
+                        id: g.id,
+                        name: g.name,
+                        badge: groupedNotesMap.get(g.id)?.length
+                      }))}
                       placement="top"
-                      className="h-7 min-w-[150px]"
+                      className="w-44"
+                      onCreate={handleCreateGroupOnTheFly}
                     />
 
                     {/* Thêm Tag nhanh */}
@@ -1617,7 +1642,7 @@ export function NotesClient({
 
       {/* MODAL TẠO / SỬA CHI TIẾT GHI CHÚ */}
       {isNoteModalOpen && editingNote && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#1a2024] border border-zinc-700/80 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="font-bold text-base text-zinc-100 flex items-center gap-2">
@@ -1704,11 +1729,17 @@ export function NotesClient({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-400 mb-1">Nhóm</label>
-                  <CustomGroupSelect
+                  <AutocompleteSearchBox
                     value={editingNote.group_id || ""}
                     onChange={(val) => setEditingNote(prev => prev ? { ...prev, group_id: val || null } : null)}
-                    groups={groups}
-                    className="w-full py-2 bg-zinc-900/80 border-zinc-700 rounded-xl"
+                    items={groups.map(g => ({
+                      id: g.id,
+                      name: g.name,
+                      badge: groupedNotesMap.get(g.id)?.length
+                    }))}
+                    placement="bottom"
+                    className="w-full"
+                    onCreate={handleCreateGroupOnTheFly}
                   />
                 </div>
 
@@ -1827,7 +1858,7 @@ export function NotesClient({
 
       {/* MODAL TẠO / SỬA NHÓM (GROUPS) */}
       {isGroupModalOpen && editingGroup && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#1a2024] border border-zinc-700/80 rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
             <h3 className="font-bold text-base text-zinc-100">
               {editingGroup.id ? "Đổi Tên Nhóm" : "Tạo Nhóm Ghi Chú Mới"}
@@ -1869,7 +1900,7 @@ export function NotesClient({
       {lightboxImage && (
         <div 
           onClick={() => setLightboxImage(null)}
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
         >
           <div className="relative max-w-5xl max-h-[90vh]">
             <img src={lightboxImage} alt="Full view" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl" />
@@ -2152,92 +2183,3 @@ function NoteCardItem({
   );
 }
 
-// --- SUB-COMPONENT: CUSTOM GROUP SELECT (Tìm kiếm & Chọn nhóm) ---
-function CustomGroupSelect({ 
-  value, 
-  onChange, 
-  groups, 
-  className = "",
-  placement = "bottom"
-}: { 
-  value: string | null; 
-  onChange: (val: string) => void; 
-  groups: NoteGroup[];
-  className?: string;
-  placement?: "top" | "bottom";
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(searchTerm.toLowerCase()));
-  const selectedGroup = groups.find(g => g.id === value);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between gap-2 px-3 bg-zinc-800/80 border border-zinc-700 hover:bg-zinc-700/80 rounded-lg text-xs text-zinc-300 transition-colors outline-none min-w-[140px] ${className}`}
-      >
-        <span className="truncate">
-          {selectedGroup ? selectedGroup.name : "Không phân nhóm"}
-        </span>
-        <ChevronDown size={14} className={`text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''} shrink-0 ml-1`} />
-      </button>
-
-      {isOpen && (
-        <div className={`absolute ${placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} left-0 w-64 max-w-[80vw] bg-[#1a2024] border border-zinc-700/80 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}>
-          <div className="p-2 border-b border-zinc-800/80">
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-2.5 text-zinc-500" />
-              <input
-                type="text"
-                autoFocus
-                placeholder="Tìm tên nhóm..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-zinc-900/80 text-zinc-200 text-xs h-8 pl-8 pr-3 rounded-lg outline-none border border-zinc-700 focus:border-blue-500/50"
-              />
-            </div>
-          </div>
-          <div className="max-h-60 overflow-y-auto p-1 custom-scrollbar">
-            <button
-              type="button"
-              onClick={() => { onChange(""); setIsOpen(false); }}
-              className={`w-full text-left px-3 py-2 text-xs rounded-md transition-colors flex items-center justify-between ${!value ? 'bg-blue-500/10 text-blue-400 font-medium' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-            >
-              Không phân nhóm
-              {!value && <Check size={14} className="shrink-0" />}
-            </button>
-            {filteredGroups.length === 0 ? (
-              <div className="text-center py-6 text-xs text-zinc-600">Không tìm thấy nhóm "{searchTerm}"</div>
-            ) : (
-              filteredGroups.map(g => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => { onChange(g.id); setIsOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-xs rounded-md transition-colors flex items-center justify-between mt-1 ${value === g.id ? 'bg-blue-500/10 text-blue-400 font-medium' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
-                >
-                  <span className="truncate">{g.name}</span>
-                  {value === g.id && <Check size={14} className="shrink-0 ml-2" />}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

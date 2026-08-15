@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { AlertModal } from "@/components/ui/AlertModal";
+import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 
 interface Board {
   id: string;
@@ -1572,17 +1573,15 @@ export function BookmarksClient({
               {boards.length > 0 && (
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Thuộc Bảng</label>
-                  <select 
+                  <AutocompleteSearchBox
                     value={editingFolder.board_id || activeBoardId || ''}
-                    onChange={e => setEditingFolder({ ...editingFolder, board_id: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    {boards.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={val => setEditingFolder({ ...editingFolder, board_id: val })}
+                    items={boards.map(b => ({ id: b.id, name: b.name }))}
+                    allowNone={false}
+                    placeholder="Tìm hoặc chọn Bảng..."
+                    className="w-full"
+                    placement="bottom"
+                  />
                 </div>
               )}
 
