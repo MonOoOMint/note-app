@@ -22,13 +22,14 @@ export async function POST(req: NextRequest) {
 
     // Thử upload lên Supabase Storage bucket 'note-images'
     try {
-      const fileExt = file.name.split('.').pop() || 'png';
-      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${user.id}/${Date.now()}-${sanitizedName}`;
+      const mimeType = file.type || 'application/octet-stream';
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('note-images')
         .upload(fileName, buffer, {
-          contentType: file.type || 'image/png',
+          contentType: mimeType,
           upsert: true
         });
 
@@ -37,7 +38,12 @@ export async function POST(req: NextRequest) {
           .from('note-images')
           .getPublicUrl(fileName);
 
-        return NextResponse.json({ url: publicUrl });
+        return NextResponse.json({ 
+          url: publicUrl,
+          name: file.name,
+          size: file.size,
+          type: mimeType
+        });
       }
     } catch (storageErr) {
       console.warn("Storage upload failed, falling back to base64:", storageErr);
@@ -45,12 +51,17 @@ export async function POST(req: NextRequest) {
 
     // Fallback: nếu storage bucket chưa tạo, trả về data URL base64 an toàn để không gián đoạn người dùng
     const base64 = buffer.toString('base64');
-    const mimeType = file.type || 'image/png';
+    const mimeType = file.type || 'application/octet-stream';
     const dataUrl = `data:${mimeType};base64,${base64}`;
 
-    return NextResponse.json({ url: dataUrl });
+    return NextResponse.json({ 
+      url: dataUrl,
+      name: file.name,
+      size: file.size,
+      type: mimeType
+    });
   } catch (error: any) {
-    console.error("Upload note image error:", error);
-    return NextResponse.json({ error: error.message || "Failed to upload image" }, { status: 500 });
+    console.error("Upload note attachment error:", error);
+    return NextResponse.json({ error: error.message || "Failed to upload file" }, { status: 500 });
   }
 }

@@ -34,13 +34,15 @@ export default async function NotesPage({
       initialNotes={loadedNotes}
       initialTags={loadedTags}
       initialNoteTags={loadedNoteTags}
-      initialSharedTitle={typeof searchParams.share_title === 'string' ? searchParams.share_title : undefined}
+      isSharedSuccess={searchParams.shared === 'success'}
+      initialSharedTitle={typeof searchParams.share_title === 'string' ? searchParams.share_title : typeof searchParams.title === 'string' ? searchParams.title : undefined}
       initialSharedText={
         [
-          typeof searchParams.share_text === 'string' ? searchParams.share_text : '',
-          typeof searchParams.share_url === 'string' ? searchParams.share_url : ''
+          typeof searchParams.share_text === 'string' ? searchParams.share_text : typeof searchParams.text === 'string' ? searchParams.text : '',
+          typeof searchParams.share_url === 'string' ? searchParams.share_url : typeof searchParams.url === 'string' ? searchParams.url : ''
         ].filter(Boolean).join('\n\n') || undefined
       }
+      initialSharedImage={typeof searchParams.share_image === 'string' ? searchParams.share_image : undefined}
     />
   );
 }

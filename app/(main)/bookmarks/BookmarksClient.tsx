@@ -225,7 +225,9 @@ export function BookmarksClient({
   };
 
   useEffect(() => {
-    fetchData();
+    if (initialBoards.length === 0 && initialFolders.length === 0) {
+      fetchData();
+    }
   }, []);
 
   const fetchData = async () => {
@@ -236,38 +238,45 @@ export function BookmarksClient({
         supabase.from('bookmarks').select('*').order('order', { ascending: true }).order('created_at', { ascending: true })
       ]);
 
-      let loadedBoards = boardsRes.data || [];
-      let loadedFolders = foldersRes.data || [];
-      
-      // Auto Migrate (Create default board if zero boards exist)
-      if (loadedBoards.length === 0 && userId) {
-        const { data: defaultBoard } = await supabase.from('bookmark_boards').insert({
-          user_id: userId,
-          name: 'Trang chủ',
-          order: 0
-        }).select().single();
-        
-        if (defaultBoard) {
-          loadedBoards = [defaultBoard];
-          const foldersToUpdate = loadedFolders.filter(f => !f.board_id);
-          if (foldersToUpdate.length > 0) {
-            const updates = foldersToUpdate.map(f => ({ ...f, board_id: defaultBoard.id }));
-            await supabase.from('bookmark_folders').upsert(updates);
-            loadedFolders = loadedFolders.map(f => ({ ...f, board_id: defaultBoard.id }));
-          }
-        }
+      if (boardsRes.data) {
+        const loadedBoards = boardsRes.data;
+        setBoards(loadedBoards);
+        const savedId = typeof window !== 'undefined' ? localStorage.getItem('bookmark_active_board_id') : null;
+        setActiveBoardId(prev => {
+          if (prev && loadedBoards.some(b => b.id === prev)) return prev;
+          if (savedId && loadedBoards.some(b => b.id === savedId)) return savedId;
+          return loadedBoards[0]?.id || null;
+        });
       }
-      
-      setBoards(loadedBoards);
-      setActiveBoardId(prev => prev && loadedBoards.some(b => b.id === prev) ? prev : (loadedBoards[0]?.id || null));
-      setFolders(loadedFolders);
-      if (bookmarksRes.data) setBookmarks(bookmarksRes.data);
+      if (foldersRes.data) {
+        setFolders(foldersRes.data);
+      }
+      if (bookmarksRes.data) {
+        setBookmarks(bookmarksRes.data);
+      }
     } catch (err) {
       console.error("fetchData error:", err);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSelectBoard = (id: string) => {
+    setActiveBoardId(id);
+    try {
+      localStorage.setItem('bookmark_active_board_id', id);
+    } catch {}
+  };
+
+  // Khôi phục board đã lưu trong localStorage khi tải trang
+  useEffect(() => {
+    try {
+      const savedBoardId = localStorage.getItem('bookmark_active_board_id');
+      if (savedBoardId && boards.some(b => b.id === savedBoardId)) {
+        setActiveBoardId(savedBoardId);
+      }
+    } catch {}
+  }, [boards]);
 
   // --- BOARD ACTIONS ---
   const handleSaveBoard = async (e: React.FormEvent) => {
@@ -294,6 +303,9 @@ export function BookmarksClient({
       if (data) {
         setBoards([...boards, data]);
         setActiveBoardId(data.id);
+        try {
+          localStorage.setItem('bookmark_active_board_id', data.id);
+        } catch {}
       }
     }
     setIsBoardModalOpen(false);
@@ -310,9 +322,20 @@ export function BookmarksClient({
       confirmText: "Xoá Bảng",
       variant: "danger",
       onConfirm: async () => {
-        setBoards(boards.filter(b => b.id !== id));
+        const remainingBoards = boards.filter(b => b.id !== id);
+        setBoards(remainingBoards);
         setFolders(folders.filter(f => f.board_id !== id));
-        if (activeBoardId === id) setActiveBoardId(boards.find(b => b.id !== id)?.id || null);
+        if (activeBoardId === id) {
+          const nextBoardId = remainingBoards[0]?.id || null;
+          setActiveBoardId(nextBoardId);
+          try {
+            if (nextBoardId) {
+              localStorage.setItem('bookmark_active_board_id', nextBoardId);
+            } else {
+              localStorage.removeItem('bookmark_active_board_id');
+            }
+          } catch {}
+        }
         await supabase.from('bookmark_boards').delete().eq('id', id);
       },
     });
@@ -1004,7 +1027,7 @@ export function BookmarksClient({
             return (
               <div 
                 key={board.id} 
-                onClick={() => setActiveBoardId(board.id)}
+                onClick={() => handleSelectBoard(board.id)}
                 onDragOver={(e) => {
                   if (draggedFolderId) {
                     e.preventDefault();
@@ -1253,6 +1276,14 @@ export function BookmarksClient({
                   <X size={13} className="mr-1.5" /> Xóa tìm kiếm
                 </Button>
               </div>
+            </div>
+          ) : !isSearching && boards.length === 0 ? (
+            /* Chưa có Bảng nào */
+            <div className="flex flex-col items-center justify-center p-16 text-zinc-500">
+              <p className="text-sm mb-3">Bạn chưa có Bảng Bookmark nào</p>
+              <Button onClick={() => { setEditingBoard({ name: "" }); setIsBoardModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 h-9 text-xs font-medium">
+                <Plus size={14} className="mr-1.5" /> Tạo Bảng Đầu Tiên
+              </Button>
             </div>
           ) : !isSearching && activeFolders.length === 0 ? (
             /* Bảng hiện tại chưa có dữ liệu */

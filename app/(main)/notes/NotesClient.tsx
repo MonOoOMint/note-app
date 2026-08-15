@@ -25,7 +25,11 @@ import {
   SlidersHorizontal,
   Maximize2,
   FileText,
-  ChevronDown
+  ChevronDown,
+  Paperclip,
+  Download,
+  File,
+  FileSpreadsheet
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
@@ -72,7 +76,7 @@ export interface Note {
   group_id?: string | null;
   title?: string | null;
   content?: string | null;
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'file';
   image_url?: string | null;
   source_app?: string | null;
   color?: string;
@@ -95,6 +99,8 @@ interface NotesClientProps {
   initialNoteTags?: NoteTag[];
   initialSharedTitle?: string;
   initialSharedText?: string;
+  initialSharedImage?: string;
+  isSharedSuccess?: boolean;
 }
 
 // Bảng màu note dịu mắt, tối giản chuẩn Dark mode
@@ -110,6 +116,177 @@ const NOTE_COLORS = [
 
 function getColorConfig(colorId?: string) {
   return NOTE_COLORS.find(c => c.id === colorId) || NOTE_COLORS[0];
+}
+
+// Xác định loại tệp đính kèm (Ảnh, PDF, Word, Excel, TXT, ...)
+export function getFileCategory(urlOrName?: string | null): 'image' | 'pdf' | 'word' | 'excel' | 'txt' | 'file' {
+  if (!urlOrName) return 'file';
+  const clean = urlOrName.split('?')[0].toLowerCase();
+  if (clean.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i) || clean.startsWith('data:image/')) return 'image';
+  if (clean.endsWith('.pdf') || clean.startsWith('data:application/pdf')) return 'pdf';
+  if (clean.match(/\.(doc|docx)$/i) || clean.includes('wordprocessingml') || clean.includes('msword')) return 'word';
+  if (clean.match(/\.(xls|xlsx|csv)$/i) || clean.includes('spreadsheetml') || clean.includes('ms-excel')) return 'excel';
+  if (clean.endsWith('.txt') || clean.startsWith('data:text/plain')) return 'txt';
+  return 'file';
+}
+
+// Lấy tên tệp từ đường dẫn URL
+export function getFileNameFromUrl(url?: string | null): string {
+  if (!url) return 'Tệp đính kèm';
+  try {
+    if (url.startsWith('data:')) {
+      const mime = url.substring(5, url.indexOf(';'));
+      if (mime.includes('pdf')) return 'document.pdf';
+      if (mime.includes('word')) return 'document.docx';
+      if (mime.includes('excel') || mime.includes('spreadsheet')) return 'spreadsheet.xlsx';
+      if (mime.includes('text')) return 'document.txt';
+      return 'Tập tin đính kèm';
+    }
+    const clean = url.split('?')[0];
+    const parts = clean.split('/');
+    const lastPart = parts[parts.length - 1];
+    return decodeURIComponent(lastPart.replace(/^\d+-[a-z0-9]+-/, '').replace(/^\d+-/, '')) || 'Tệp đính kèm';
+  } catch {
+    return 'Tệp đính kèm';
+  }
+}
+
+// Component hiển thị tệp đính kèm / hình ảnh đa năng
+export function AttachmentDisplay({ 
+  url, 
+  onRemove, 
+  onViewImage, 
+  compact = false 
+}: { 
+  url: string; 
+  onRemove?: () => void; 
+  onViewImage?: (url: string) => void;
+  compact?: boolean;
+}) {
+  const category = getFileCategory(url);
+  const fileName = getFileNameFromUrl(url);
+
+  if (category === 'image') {
+    return (
+      <div className="relative rounded-xl overflow-hidden bg-black/40 border border-zinc-700/60 group/img flex items-center justify-center">
+        <img 
+          src={url} 
+          alt="Attached image" 
+          className={`w-full object-cover ${compact ? 'max-h-36' : 'max-h-64 object-contain'} ${onViewImage ? 'cursor-zoom-in' : ''}`}
+          onClick={() => onViewImage && onViewImage(url)}
+        />
+        {onViewImage && (
+          <div 
+            onClick={() => onViewImage(url)}
+            className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity cursor-zoom-in"
+          >
+            <Maximize2 size={18} className="text-white drop-shadow" />
+          </div>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="absolute top-2 right-2 p-1.5 bg-black/75 hover:bg-red-600 text-white rounded-full shadow transition-colors z-10"
+            title="Gỡ ảnh"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Cấu hình nhãn & màu sắc theo loại file tài liệu
+  const config = {
+    pdf: {
+      label: "PDF",
+      bg: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20",
+      badge: "bg-red-600 text-white",
+      icon: FileText
+    },
+    word: {
+      label: "DOC",
+      bg: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20",
+      badge: "bg-blue-600 text-white",
+      icon: FileText
+    },
+    excel: {
+      label: "XLS",
+      bg: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20",
+      badge: "bg-emerald-600 text-white",
+      icon: FileSpreadsheet
+    },
+    txt: {
+      label: "TXT",
+      bg: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20",
+      badge: "bg-amber-600 text-white",
+      icon: FileText
+    },
+    file: {
+      label: "FILE",
+      bg: "bg-zinc-500/10 border-zinc-500/30 text-zinc-300 hover:bg-zinc-500/20",
+      badge: "bg-zinc-600 text-white",
+      icon: File
+    }
+  }[category] || {
+    label: "FILE",
+    bg: "bg-zinc-500/10 border-zinc-500/30 text-zinc-300 hover:bg-zinc-500/20",
+    badge: "bg-zinc-600 text-white",
+    icon: File
+  };
+
+  const IconComponent = config.icon;
+
+  return (
+    <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${config.bg} relative group/doc`}>
+      <a 
+        href={url} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center gap-3 min-w-0 flex-1 pr-2"
+        title="Bấm để mở hoặc xem tệp"
+      >
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 relative bg-zinc-900/80 border border-white/10 shadow-sm">
+          <IconComponent size={18} />
+          <span className={`absolute -bottom-1 -right-1 text-[8px] font-black px-1 rounded-sm uppercase tracking-tighter ${config.badge}`}>
+            {config.label}
+          </span>
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs font-semibold truncate text-zinc-200 hover:underline">{fileName}</span>
+          <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+            Bấm để mở / xem <ExternalLink size={10} />
+          </span>
+        </div>
+      </a>
+      
+      <div className="flex items-center gap-1 shrink-0">
+        <a
+          href={url}
+          download={fileName}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
+          title="Tải về máy"
+        >
+          <Download size={15} />
+        </a>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="p-1.5 hover:bg-red-500/20 rounded-lg text-zinc-400 hover:text-red-400 transition-colors"
+            title="Xóa tệp đính kèm"
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Chuẩn hóa tiếng Việt không dấu cho tìm kiếm
@@ -149,7 +326,9 @@ export function NotesClient({
   initialTags = [],
   initialNoteTags = [],
   initialSharedTitle,
-  initialSharedText
+  initialSharedText,
+  initialSharedImage,
+  isSharedSuccess
 }: NotesClientProps) {
   const [groups, setGroups] = useState<NoteGroup[]>(initialGroups);
   const [notes, setNotes] = useState<Note[]>(initialNotes);
@@ -169,25 +348,46 @@ export function NotesClient({
   };
   const isAccordionOpen = (id: string) => expandedAccordions[id] === true;
 
+  const handleOpenCreateNote = (groupId: string = "") => {
+    setEditingNote({
+      id: "",
+      user_id: userId,
+      title: "",
+      content: "",
+      group_id: groupId || null,
+      color: "default",
+      type: "text",
+      image_url: null,
+      source_app: null,
+      is_pinned: false,
+      order: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    setEditTags([]);
+    setEditTagInput("");
+    setIsNoteModalOpen(true);
+  };
+
   const handleQuickAddNote = (groupId: string = "") => {
-    setNewGroupId(groupId);
-    setIsComposerExpanded(true);
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+    handleOpenCreateNote(groupId);
   };
 
   // Composer State (Khung nhập ghi chú nhanh)
-  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
+  const hasInitialShare = Boolean(initialSharedTitle || initialSharedText || initialSharedImage);
+  const [isComposerExpanded, setIsComposerExpanded] = useState(hasInitialShare);
+  const [newTitle, setNewTitle] = useState(initialSharedTitle || "");
+  const [newContent, setNewContent] = useState(initialSharedText || "");
   const [newGroupId, setNewGroupId] = useState<string>("");
   const [newTagInput, setNewTagInput] = useState("");
   const [newSelectedTags, setNewSelectedTags] = useState<string[]>([]);
   const [newColor, setNewColor] = useState("default");
   const [newIsPinned, setNewIsPinned] = useState(false);
-  const [newImageUrl, setNewImageUrl] = useState<string | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState<string | null>(initialSharedImage || null);
   const [isUploading, setIsUploading] = useState(false);
   const composerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const modalImageInputRef = useRef<HTMLInputElement>(null);
 
   // Modals state
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -265,6 +465,22 @@ export function NotesClient({
     } catch (e) {}
   }, []);
 
+  // Xử lý thông báo khi nhận dữ liệu chia sẻ thành công
+  useEffect(() => {
+    if (isSharedSuccess) {
+      setAlertConfig({
+        isOpen: true,
+        title: "Đã lưu ghi chú chia sẻ! 📱",
+        message: "Nội dung / hình ảnh đã được tự động lưu vào danh sách ghi chú của bạn.",
+        type: "success"
+      });
+      if (typeof window !== "undefined" && window.history.replaceState) {
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+  }, [isSharedSuccess]);
+
   const changeViewMode = (mode: 'grid' | 'list') => {
     setViewMode(mode);
     try { localStorage.setItem('notes_view_mode', mode); } catch {}
@@ -283,7 +499,7 @@ export function NotesClient({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [newTitle, newContent, newImageUrl]);
 
-  // Xử lý upload ảnh
+  // Xử lý upload ảnh & tệp đính kèm
   const uploadImageFile = async (file: File): Promise<string | null> => {
     setIsUploading(true);
     try {
@@ -299,8 +515,8 @@ export function NotesClient({
     } catch (err: any) {
       setAlertConfig({
         isOpen: true,
-        title: "Lỗi tải ảnh",
-        message: err.message || "Không thể tải ảnh lên",
+        title: "Lỗi tải tệp",
+        message: err.message || "Không thể tải tệp lên",
         type: "error"
       });
       return null;
@@ -309,11 +525,11 @@ export function NotesClient({
     }
   };
 
-  // Xử lý Dán ảnh bằng Ctrl + V
+  // Xử lý Dán ảnh / tệp bằng Ctrl + V
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf("image") !== -1) {
+      if (items[i].kind === 'file') {
         e.preventDefault();
         setIsComposerExpanded(true);
         const file = items[i].getAsFile();
@@ -326,16 +542,14 @@ export function NotesClient({
     }
   };
 
-  // Xử lý Kéo thả ảnh (Drag and Drop)
+  // Xử lý Kéo thả ảnh & tài liệu (Drag and Drop)
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type.startsWith("image/")) {
-        setIsComposerExpanded(true);
-        const url = await uploadImageFile(file);
-        if (url) setNewImageUrl(url);
-      }
+      setIsComposerExpanded(true);
+      const url = await uploadImageFile(file);
+      if (url) setNewImageUrl(url);
     }
   };
 
@@ -432,10 +646,82 @@ export function NotesClient({
     setIsNoteModalOpen(true);
   };
 
+  const handlePasteInModal = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) {
+          const url = await uploadImageFile(file);
+          if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+        }
+        return;
+      }
+    }
+  };
+
   const handleSaveEditNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingNote) return;
 
+    if (!editingNote.title?.trim() && !editingNote.content?.trim() && !editingNote.image_url) {
+      setAlertConfig({
+        isOpen: true,
+        title: "Chưa có nội dung",
+        message: "Vui lòng nhập tiêu đề, nội dung hoặc đính kèm ảnh cho ghi chú.",
+        type: "warning"
+      });
+      return;
+    }
+
+    if (!editingNote.id) {
+      // Tạo mới ghi chú từ Modal
+      const noteType = editingNote.image_url ? 'image' : 'text';
+      const { data: createdNote, error } = await supabase
+        .from('notes')
+        .insert({
+          user_id: userId,
+          group_id: editingNote.group_id || null,
+          title: editingNote.title?.trim() || null,
+          content: editingNote.content?.trim() || null,
+          type: noteType,
+          image_url: editingNote.image_url || null,
+          color: editingNote.color || 'default',
+          is_pinned: editingNote.is_pinned || false,
+          order: 0
+        })
+        .select()
+        .single();
+
+      if (error) {
+        setAlertConfig({
+          isOpen: true,
+          title: "Lỗi tạo ghi chú",
+          message: error.message,
+          type: "error"
+        });
+        return;
+      }
+
+      if (createdNote) {
+        let newLinks: NoteTag[] = [];
+        if (editTags.length > 0) {
+          const resolvedTags = await getOrCreateTags(editTags);
+          newLinks = resolvedTags.map(t => ({ note_id: createdNote.id, tag_id: t.id }));
+          if (newLinks.length > 0) {
+            await supabase.from('note_tags').insert(newLinks);
+            setNoteTags(prev => [...prev, ...newLinks]);
+          }
+        }
+        setNotes(prev => [createdNote, ...prev]);
+        setIsNoteModalOpen(false);
+        setEditingNote(null);
+      }
+      return;
+    }
+
+    // Cập nhật ghi chú hiện có
     const { data: updatedNote, error } = await supabase
       .from('notes')
       .update({
@@ -776,8 +1062,8 @@ export function NotesClient({
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <ImageIcon size={15} />
-                <span>Có hình ảnh</span>
+                <Paperclip size={15} />
+                <span>Có tệp đính kèm</span>
               </div>
             </button>
           </div>
@@ -881,7 +1167,7 @@ export function NotesClient({
             <h1 className="text-base font-bold text-zinc-100 flex items-center gap-2">
               {selectedFilter === 'all' && 'Tất cả ghi chú'}
               {selectedFilter === 'pinned' && 'Ghi chú đã ghim ⭐'}
-              {selectedFilter === 'images' && 'Ghi chú có ảnh 🖼️'}
+              {selectedFilter === 'images' && 'Ghi chú có tệp đính kèm 📎'}
               {selectedFilter.startsWith('group:') && (groups.find(g => g.id === selectedFilter.replace('group:', ''))?.name || 'Nhóm ghi chú')}
               {selectedFilter.startsWith('tag:') && `#${tags.find(t => t.id === selectedFilter.replace('tag:', ''))?.name || 'Tag'}`}
             </h1>
@@ -947,17 +1233,14 @@ export function NotesClient({
                 isComposerExpanded ? 'ring-2 ring-blue-500/40 p-4' : 'p-3 hover:border-zinc-600'
               }`}
             >
-              {/* Preview ảnh đính kèm nếu có */}
+              {/* Preview tệp / ảnh đính kèm nếu có */}
               {newImageUrl && (
-                <div className="relative mb-3 rounded-xl overflow-hidden bg-black/40 border border-zinc-700/60 group max-h-72 flex items-center justify-center">
-                  <img src={newImageUrl} alt="Attached" className="w-full object-contain max-h-72 rounded-lg" />
-                  <button
-                    onClick={() => setNewImageUrl(null)}
-                    className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-600 text-white rounded-full transition-colors shadow-md"
-                    title="Gỡ ảnh"
-                  >
-                    <X size={14} />
-                  </button>
+                <div className="mb-3">
+                  <AttachmentDisplay 
+                    url={newImageUrl} 
+                    onRemove={() => setNewImageUrl(null)} 
+                    onViewImage={setLightboxImage} 
+                  />
                 </div>
               )}
 
@@ -992,7 +1275,7 @@ export function NotesClient({
                     handleCreateNote();
                   }
                 }}
-                placeholder={isComposerExpanded ? "Nội dung ghi chú... (Hỗ trợ paste ảnh)" : "Tạo ghi chú nhanh... (Hỗ trợ paste ảnh)"}
+                placeholder={isComposerExpanded ? "Nội dung ghi chú... (Hỗ trợ paste ảnh / tài liệu)" : "Tạo ghi chú nhanh... (Hỗ trợ paste ảnh / tài liệu)"}
                 rows={isComposerExpanded ? 3 : 1}
                 className="w-full bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none resize-none"
               />
@@ -1018,10 +1301,10 @@ export function NotesClient({
                   {/* Công cụ bên trái: Chọn nhóm, thêm tag, thêm ảnh, chọn màu */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     
-                    {/* Nút Upload Ảnh */}
+                    {/* Nút Upload Ảnh & Tệp */}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
                       ref={imageInputRef}
                       className="hidden"
                       onChange={async (e) => {
@@ -1034,11 +1317,11 @@ export function NotesClient({
                     <button
                       onClick={() => imageInputRef.current?.click()}
                       disabled={isUploading}
-                      className="p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1 text-xs"
-                      title="Tải ảnh lên"
+                      className="p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
+                      title="Đính kèm tệp / ảnh (PDF, Word, Excel, TXT, Ảnh)"
                     >
-                      <ImageIcon size={16} />
-                      {isUploading && <span className="text-[10px]">Đang tải...</span>}
+                      <Paperclip size={16} />
+                      <span className="text-xs">{isUploading ? "Đang tải..." : "Đính kèm"}</span>
                     </button>
 
                     {/* Chọn Nhóm (Custom) */}
@@ -1291,42 +1574,72 @@ export function NotesClient({
         </div>
       </div>
 
-      {/* MODAL SỬA CHI TIẾT GHI CHÚ */}
+      {/* MODAL TẠO / SỬA CHI TIẾT GHI CHÚ */}
       {isNoteModalOpen && editingNote && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#1a2024] border border-zinc-700/80 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
+          <div className="bg-[#1a2024] border border-zinc-700/80 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="font-bold text-base text-zinc-100 flex items-center gap-2">
-                <Edit2 size={16} className="text-blue-400" />
-                Chỉnh Sửa Ghi Chú
+                {editingNote.id ? (
+                  <>
+                    <Edit2 size={16} className="text-blue-400" />
+                    Chỉnh Sửa Ghi Chú
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} className="text-blue-400" />
+                    Thêm Ghi Chú Mới
+                  </>
+                )}
               </h3>
-              <button onClick={() => setIsNoteModalOpen(false)} className="text-zinc-400 hover:text-zinc-200">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingNote(prev => prev ? { ...prev, is_pinned: !prev.is_pinned } : null)}
+                  className={`p-1.5 rounded-lg transition-colors ${editingNote.is_pinned ? 'text-amber-400 bg-amber-400/10' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title={editingNote.is_pinned ? "Bỏ ghim" : "Ghim ghi chú"}
+                >
+                  <Pin size={16} className={editingNote.is_pinned ? "fill-amber-400" : ""} />
+                </button>
+                <button onClick={() => setIsNoteModalOpen(false)} className="text-zinc-400 hover:text-zinc-200 p-1">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveEditNote} className="space-y-4 flex-1 overflow-y-auto pr-1">
+            <form onSubmit={handleSaveEditNote} onPaste={handlePasteInModal} className="space-y-4 flex-1 overflow-y-auto pr-1">
               
-              {/* Preview Ảnh */}
+              {/* Hidden file input for modal attachment */}
+              <input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
+                className="hidden"
+                ref={modalImageInputRef}
+                onChange={async (e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    const url = await uploadImageFile(e.target.files[0]);
+                    if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+                  }
+                }}
+              />
+
+              {/* Preview Tệp / Ảnh đính kèm */}
               {editingNote.image_url && (
-                <div className="relative rounded-xl overflow-hidden bg-black/40 border border-zinc-700 max-h-64 flex items-center justify-center">
-                  <img src={editingNote.image_url} alt="Attached" className="w-full object-contain max-h-64" />
-                  <button
-                    type="button"
-                    onClick={() => setEditingNote(prev => prev ? { ...prev, image_url: null } : null)}
-                    className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-600 text-white rounded-full shadow"
-                    title="Gỡ ảnh"
-                  >
-                    <X size={14} />
-                  </button>
+                <div className="mb-2">
+                  <AttachmentDisplay
+                    url={editingNote.image_url}
+                    onRemove={() => setEditingNote(prev => prev ? { ...prev, image_url: null } : null)}
+                    onViewImage={setLightboxImage}
+                  />
                 </div>
               )}
 
               {/* Tiêu đề */}
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Tiêu đề</label>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1">Tiêu đề (tuỳ chọn)</label>
                 <input
                   type="text"
+                  autoFocus={!editingNote.id}
                   value={editingNote.title || ""}
                   onChange={(e) => setEditingNote(prev => prev ? { ...prev, title: e.target.value } : null)}
                   placeholder="Tiêu đề ghi chú"
@@ -1336,7 +1649,7 @@ export function NotesClient({
 
               {/* Nội dung */}
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Nội dung</label>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1">Nội dung (hỗ trợ Ctrl+V paste ảnh)</label>
                 <textarea
                   value={editingNote.content || ""}
                   onChange={(e) => setEditingNote(prev => prev ? { ...prev, content: e.target.value } : null)}
@@ -1423,19 +1736,31 @@ export function NotesClient({
 
               {/* Action buttons */}
               <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (editingNote) {
-                      setIsNoteModalOpen(false);
-                      handleDeleteNote(editingNote);
-                    }
-                  }}
-                  className="px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-xl transition-colors flex items-center gap-1.5"
-                >
-                  <Trash2 size={14} />
-                  Xoá ghi chú
-                </button>
+                {editingNote.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingNote) {
+                        setIsNoteModalOpen(false);
+                        handleDeleteNote(editingNote);
+                      }
+                    }}
+                    className="px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    <Trash2 size={14} />
+                    Xoá ghi chú
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => modalImageInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="px-3 py-2 text-xs text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    <Paperclip size={14} />
+                    {isUploading ? "Đang tải tệp..." : editingNote.image_url ? "Đổi tệp" : "Đính kèm tệp / ảnh"}
+                  </button>
+                )}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1446,9 +1771,10 @@ export function NotesClient({
                   </button>
                   <button
                     type="submit"
+                    disabled={isUploading}
                     className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md"
                   >
-                    Lưu Thay Đổi
+                    {editingNote.id ? "Lưu Thay Đổi" : "Tạo Ghi Chú"}
                   </button>
                 </div>
               </div>
@@ -1648,16 +1974,14 @@ function NoteCardItem({
         viewMode === 'list' ? 'p-3 md:p-4 gap-2' : 'p-4 justify-between'
       }`}
     >
-      {/* ẢNH TRONG GRID VIEW (Hiện ở trên cùng) */}
+      {/* TỆP / ẢNH TRONG GRID VIEW */}
       {note.image_url && viewMode === 'grid' && (
-        <div 
-          onClick={(e) => { e.stopPropagation(); onViewImage(note.image_url!); }}
-          className="mb-3 rounded-xl overflow-hidden bg-black/30 border border-zinc-700/50 max-h-52 relative group/img cursor-zoom-in shrink-0"
-        >
-          <img src={note.image_url} alt="Note image" className="w-full object-cover max-h-52 rounded-lg transition-transform group-hover/img:scale-105" />
-          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
-            <Maximize2 size={18} className="text-white drop-shadow" />
-          </div>
+        <div className="mb-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <AttachmentDisplay 
+            url={note.image_url} 
+            onViewImage={onViewImage} 
+            compact={true} 
+          />
         </div>
       )}
 
@@ -1709,13 +2033,29 @@ function NoteCardItem({
           </div>
         </div>
 
-        {/* ẢNH TRONG LIST VIEW (Thumbnail nhỏ gọn) */}
+        {/* TỆP / ẢNH TRONG LIST VIEW */}
         {note.image_url && viewMode === 'list' && (
-          <div 
-            onClick={(e) => { e.stopPropagation(); onViewImage(note.image_url!); }}
-            className="w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-lg overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
-          >
-            <img src={note.image_url} alt="Note image" className="w-full h-full object-cover transition-transform group-hover/img:scale-105" />
+          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            {getFileCategory(note.image_url) === 'image' ? (
+              <div 
+                onClick={(e) => { e.stopPropagation(); onViewImage(note.image_url!); }}
+                className="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
+              >
+                <img src={note.image_url} alt="Note image" className="w-full h-full object-cover transition-transform group-hover/img:scale-105" />
+              </div>
+            ) : (
+              <a
+                href={note.image_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="h-9 md:h-10 px-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/80 hover:border-blue-500/50 flex items-center gap-2 text-xs text-zinc-200 transition-colors"
+                title={getFileNameFromUrl(note.image_url)}
+              >
+                <FileText size={15} className="text-blue-400 shrink-0" />
+                <span className="max-w-[100px] md:max-w-[140px] truncate text-[11px] font-medium">{getFileNameFromUrl(note.image_url)}</span>
+              </a>
+            )}
           </div>
         )}
       </div>

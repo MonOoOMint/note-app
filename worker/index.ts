@@ -19,12 +19,12 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url === "/" && "focus" in client) {
+        if ("focus" in client) {
           return client.focus();
         }
       }
       if (self.clients.openWindow) {
-        return self.clients.openWindow("/");
+        return self.clients.openWindow("/todos");
       }
     })
   );
