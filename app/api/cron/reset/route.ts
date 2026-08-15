@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 
+export const dynamic = 'force-dynamic';
+
 // Configure Web Push
 webpush.setVapidDetails(
   'mailto:your-email@example.com', // Cần điền email liên hệ thực tế sau này
@@ -18,6 +20,9 @@ export async function GET(request: Request) {
       throw new Error("Missing Supabase credentials");
     }
     
+    const url = new URL(request.url);
+    const forceNotification = url.searchParams.get('force') === 'true';
+
     // Sử dụng Service Role để vượt qua RLS
     const supabase = createClient(supabaseUrl, supabaseKey);
     
@@ -28,16 +33,35 @@ export async function GET(request: Request) {
     const vnHour = vnDate.getHours();
     const todayDayOfWeek = vnDate.getDay(); // 0 = Chủ nhật, 1 = T2, 2 = T3, ..., 6 = T7
 
-    // Xác định lời chào phù hợp theo giờ Việt Nam
+    // --- CẤU HÌNH KHUNG GIỜ THÔNG BÁO THEO YÊU CẦU ---
+    // - Sáng 8h (8h00)
+    // - Lặp lại sau 3 tiếng: 11h (11h00)
+    // - Chiều 1h (13h00)
+    // - Lặp lại sau 3 tiếng: 16h (16h00)
+    // - Lặp lại sau 3 tiếng: 19h (19h00)
+    // - Khung giờ cấm: từ 22h tối (10h tối) đến 8h sáng hôm sau TUYỆT ĐỐI KHÔNG gửi thông báo
+    const NOTIFICATION_SCHEDULE_HOURS = [8, 11, 13, 16, 19];
+    const isQuietHours = vnHour >= 22 || vnHour < 8;
+    const shouldSendNotification = forceNotification || (!isQuietHours && NOTIFICATION_SCHEDULE_HOURS.includes(vnHour));
+
+    // Xác định tiêu đề thông báo phù hợp theo giờ Việt Nam
     let greetingTitle = "Nhắc nhở công việc 🔔";
-    if (vnHour >= 5 && vnHour < 12) {
+    if (vnHour === 8) {
+      greetingTitle = "Chào buổi sáng! ☕";
+    } else if (vnHour === 11) {
+      greetingTitle = "Nhắc việc trưa! 📋";
+    } else if (vnHour === 13) {
+      greetingTitle = "Chào buổi chiều! ☀️";
+    } else if (vnHour === 16) {
+      greetingTitle = "Nhắc nhở chiều! 🎯";
+    } else if (vnHour === 19) {
+      greetingTitle = "Tổng kết buổi tối! 🌙";
+    } else if (vnHour >= 5 && vnHour < 12) {
       greetingTitle = "Chào buổi sáng! ☕";
     } else if (vnHour >= 12 && vnHour < 18) {
       greetingTitle = "Chào buổi chiều! ☀️";
-    } else if (vnHour >= 18 && vnHour < 22) {
-      greetingTitle = "Chào buổi tối! 🌙";
     } else {
-      greetingTitle = "Nhắc nhở công việc! 🌙";
+      greetingTitle = "Nhắc nhở công việc! 📋";
     }
 
     // --- PHASE 1: RESET RECURRING TASKS ---
@@ -83,56 +107,59 @@ export async function GET(request: Request) {
     }
 
     // --- PHASE 2: SEND NOTIFICATIONS FOR UNCOMPLETED TASKS ---
-    const { data: subs, error: subsError } = await supabase.from('push_subscriptions').select('*');
     let pushCount = 0;
 
-    if (subs && subs.length > 0 && !subsError) {
-      // Gom nhóm subscription theo user_id
-      const subsByUser = subs.reduce((acc: any, sub: any) => {
-        if (!acc[sub.user_id]) acc[sub.user_id] = [];
-        acc[sub.user_id].push(sub);
-        return acc;
-      }, {});
+    if (shouldSendNotification) {
+      const { data: subs, error: subsError } = await supabase.from('push_subscriptions').select('*');
 
-      for (const userId of Object.keys(subsByUser)) {
-        // Lấy số lượng công việc CHƯA HOÀN THÀNH (bỏ qua checklist)
-        const { count, error } = await supabase
-          .from('todos')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .eq('is_done', false)
-          .or('type.is.null,type.eq.todo');
-        
-        if (error) {
-          console.error("Error fetching tasks for user:", userId, error);
-          continue;
-        }
+      if (subs && subs.length > 0 && !subsError) {
+        // Gom nhóm subscription theo user_id
+        const subsByUser = subs.reduce((acc: any, sub: any) => {
+          if (!acc[sub.user_id]) acc[sub.user_id] = [];
+          acc[sub.user_id].push(sub);
+          return acc;
+        }, {});
 
-        if (count && count > 0) {
-          const payload = JSON.stringify({
-            title: greetingTitle,
-            body: `Bạn đang có ${count} công việc chưa hoàn thành. Hãy kiểm tra nhé!`,
-            icon: "/icon.svg"
-          });
+        for (const userId of Object.keys(subsByUser)) {
+          // Lấy số lượng công việc CHƯA HOÀN THÀNH (bỏ qua checklist)
+          const { count, error } = await supabase
+            .from('todos')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .eq('is_done', false)
+            .or('type.is.null,type.eq.todo');
+          
+          if (error) {
+            console.error("Error fetching tasks for user:", userId, error);
+            continue;
+          }
 
-          for (const sub of subsByUser[userId]) {
-            const pushSubscription = {
-              endpoint: sub.endpoint,
-              keys: {
-                p256dh: sub.p256dh,
-                auth: sub.auth
-              }
-            };
+          if (count && count > 0) {
+            const payload = JSON.stringify({
+              title: greetingTitle,
+              body: `Bạn đang có ${count} công việc chưa hoàn thành. Hãy kiểm tra nhé!`,
+              icon: "/icon.svg"
+            });
 
-            try {
-              await webpush.sendNotification(pushSubscription, payload);
-              pushCount++;
-            } catch (error: any) {
-              if (error.statusCode === 410) {
-                // Token hết hạn hoặc user hủy quyền -> Xóa khỏi DB
-                await supabase.from('push_subscriptions').delete().eq('id', sub.id);
-              } else {
-                console.error("Push error:", error);
+            for (const sub of subsByUser[userId]) {
+              const pushSubscription = {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth
+                }
+              };
+
+              try {
+                await webpush.sendNotification(pushSubscription, payload);
+                pushCount++;
+              } catch (error: any) {
+                if (error.statusCode === 410) {
+                  // Token hết hạn hoặc user hủy quyền -> Xóa khỏi DB
+                  await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+                } else {
+                  console.error("Push error:", error);
+                }
               }
             }
           }
@@ -142,8 +169,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Reset ${resetCount} tasks and sent ${pushCount} notifications.`,
+      message: `Reset ${resetCount} tasks. Sent ${pushCount} notifications (Hour: ${vnHour}h VN, Notification active: ${shouldSendNotification}).`,
       vnTime: `${vnHour}:${vnDate.getMinutes().toString().padStart(2, '0')}`,
+      isQuietHours,
+      notificationSent: shouldSendNotification,
       greeting: greetingTitle
     });
   } catch (error: any) {
