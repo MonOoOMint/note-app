@@ -29,7 +29,10 @@ import {
   Paperclip,
   Download,
   File,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowLeft,
+  Loader2,
+  Settings2
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
@@ -367,6 +370,7 @@ export function NotesClient({
     });
     setEditTags([]);
     setEditTagInput("");
+    setIsMetadataDrawerOpen(false);
     setIsNoteModalOpen(true);
   };
 
@@ -395,6 +399,7 @@ export function NotesClient({
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState("");
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [isMetadataDrawerOpen, setIsMetadataDrawerOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -644,6 +649,7 @@ export function NotesClient({
     const currentTagNames = tags.filter(t => currentTagIds.includes(t.id)).map(t => t.name);
     setEditTags(currentTagNames);
     setEditTagInput("");
+    setIsMetadataDrawerOpen(false);
     setIsNoteModalOpen(true);
   };
 
@@ -1640,175 +1646,88 @@ export function NotesClient({
         </div>
       </div>
 
-      {/* MODAL TẠO / SỬA CHI TIẾT GHI CHÚ */}
+      {/* MODAL TẠO / SỬA CHI TIẾT GHI CHÚ - TOÀN MÀN HÌNH TẬP TRUNG NỘI DUNG */}
       {isNoteModalOpen && editingNote && (
-        <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#1a2024] border border-zinc-700/80 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="font-bold text-base text-zinc-100 flex items-center gap-2">
-                {editingNote.id ? (
-                  <>
-                    <Edit2 size={16} className="text-blue-400" />
-                    Chỉnh Sửa Ghi Chú
-                  </>
-                ) : (
-                  <>
-                    <Plus size={16} className="text-blue-400" />
-                    Thêm Ghi Chú Mới
-                  </>
-                )}
-              </h3>
-              <div className="flex items-center gap-1.5">
+        <div className="fixed inset-0 z-[80] bg-[#0e1113] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+          <form onSubmit={handleSaveEditNote} className="flex-1 flex flex-col h-full overflow-hidden">
+            
+            {/* Hidden file input for modal attachment */}
+            <input
+              type="file"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
+              className="hidden"
+              ref={modalImageInputRef}
+              onChange={async (e) => {
+                if (e.target.files && e.target.files[0]) {
+                  const url = await uploadImageFile(e.target.files[0]);
+                  if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+                }
+              }}
+            />
+
+            {/* Top Bar Navigation Header */}
+            <header className="h-14 px-4 sm:px-6 border-b border-zinc-800 flex items-center justify-between bg-[#14191d]/90 backdrop-blur shrink-0 gap-3">
+              {/* Nút Quay lại */}
+              <button
+                type="button"
+                onClick={() => setIsNoteModalOpen(false)}
+                className="flex items-center gap-2 px-2.5 py-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-xl transition-colors text-xs sm:text-sm"
+                title="Đóng (Esc)"
+              >
+                <ArrowLeft size={18} />
+                <span className="font-semibold hidden sm:inline">Quay lại</span>
+              </button>
+
+              {/* Trạng thái & Tiêu đề rút gọn ở Header */}
+              <div className="flex-1 min-w-0 text-center px-2">
+                <span className="text-xs font-semibold text-zinc-400 truncate block">
+                  {editingNote.id ? (editingNote.title ? editingNote.title : "Chỉnh sửa ghi chú") : "Tạo ghi chú mới"}
+                </span>
+              </div>
+
+              {/* Action buttons góc phải */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Nút Ghim */}
                 <button
                   type="button"
                   onClick={() => setEditingNote(prev => prev ? { ...prev, is_pinned: !prev.is_pinned } : null)}
-                  className={`p-1.5 rounded-lg transition-colors ${editingNote.is_pinned ? 'text-amber-400 bg-amber-400/10' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  className={`p-2 rounded-xl transition-colors text-xs ${editingNote.is_pinned ? 'text-amber-400 bg-amber-400/10' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}
                   title={editingNote.is_pinned ? "Bỏ ghim" : "Ghim ghi chú"}
                 >
                   <Pin size={16} className={editingNote.is_pinned ? "fill-amber-400" : ""} />
                 </button>
-                <button onClick={() => setIsNoteModalOpen(false)} className="text-zinc-400 hover:text-zinc-200 p-1">
-                  <X size={18} />
+
+                {/* Nút Đính kèm nhanh */}
+                <button
+                  type="button"
+                  onClick={() => modalImageInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-xl transition-colors"
+                  title="Đính kèm tệp / ảnh"
+                >
+                  <Paperclip size={16} />
                 </button>
-              </div>
-            </div>
 
-            <form onSubmit={handleSaveEditNote} onPaste={handlePasteInModal} className="space-y-4 flex-1 overflow-y-auto pr-1">
-              
-              {/* Hidden file input for modal attachment */}
-              <input
-                type="file"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
-                className="hidden"
-                ref={modalImageInputRef}
-                onChange={async (e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    const url = await uploadImageFile(e.target.files[0]);
-                    if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
-                  }
-                }}
-              />
+                {/* Nút Mở rộng menu Tuỳ chọn (Nhóm, Màu, Tag) */}
+                <button
+                  type="button"
+                  onClick={() => setIsMetadataDrawerOpen(!isMetadataDrawerOpen)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                    isMetadataDrawerOpen
+                      ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
+                      : "bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 border-zinc-700/80"
+                  }`}
+                  title="Tuỳ chọn nhóm, tag, màu sắc"
+                >
+                  <SlidersHorizontal size={14} />
+                  <span className="hidden md:inline">Tuỳ chọn</span>
+                  {(editingNote.group_id || editTags.length > 0 || editingNote.color !== 'default') && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                  )}
+                </button>
 
-              {/* Preview Tệp / Ảnh đính kèm */}
-              {editingNote.image_url && (
-                <div className="mb-2">
-                  <AttachmentDisplay
-                    url={editingNote.image_url}
-                    onRemove={() => setEditingNote(prev => prev ? { ...prev, image_url: null } : null)}
-                    onViewImage={setLightboxImage}
-                  />
-                </div>
-              )}
-
-              {/* Tiêu đề */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Tiêu đề (tuỳ chọn)</label>
-                <input
-                  type="text"
-                  autoFocus={!editingNote.id}
-                  value={editingNote.title || ""}
-                  onChange={(e) => setEditingNote(prev => prev ? { ...prev, title: e.target.value } : null)}
-                  placeholder="Tiêu đề ghi chú"
-                  className="w-full px-3 py-2 bg-zinc-900/80 border border-zinc-700 rounded-xl text-sm text-zinc-100 outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Nội dung */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Nội dung (hỗ trợ Ctrl+V paste ảnh)</label>
-                <textarea
-                  value={editingNote.content || ""}
-                  onChange={(e) => setEditingNote(prev => prev ? { ...prev, content: e.target.value } : null)}
-                  placeholder="Nội dung ghi chú..."
-                  rows={5}
-                  className="w-full px-3 py-2 bg-zinc-900/80 border border-zinc-700 rounded-xl text-sm text-zinc-100 outline-none focus:border-blue-500 resize-none"
-                />
-              </div>
-
-              {/* Nhóm & Màu sắc */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 mb-1">Nhóm</label>
-                  <AutocompleteSearchBox
-                    value={editingNote.group_id || ""}
-                    onChange={(val) => setEditingNote(prev => prev ? { ...prev, group_id: val || null } : null)}
-                    items={groups.map(g => ({
-                      id: g.id,
-                      name: g.name,
-                      badge: groupedNotesMap.get(g.id)?.length
-                    }))}
-                    placement="bottom"
-                    className="w-full"
-                    onCreate={handleCreateGroupOnTheFly}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 mb-1">Màu sắc thẻ</label>
-                  <div className="flex items-center gap-1.5 py-1">
-                    {NOTE_COLORS.map(c => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        onClick={() => setEditingNote(prev => prev ? { ...prev, color: c.id } : null)}
-                        className={`w-6 h-6 rounded-full border transition-transform ${c.bg} ${editingNote.color === c.id ? 'scale-125 border-blue-400 ring-2 ring-blue-500/30' : 'border-zinc-600'}`}
-                        title={c.name}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Tags */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Thẻ Tags</label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {editTags.map(tagName => (
-                    <span key={tagName} className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-600/20 text-blue-300 border border-blue-500/30">
-                      #{tagName}
-                      <button type="button" onClick={() => setEditTags(prev => prev.filter(t => t !== tagName))} className="hover:text-red-400">
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={editTagInput}
-                    onChange={(e) => setEditTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && editTagInput.trim()) {
-                        e.preventDefault();
-                        const clean = editTagInput.trim().replace(/^#/, '');
-                        if (clean && !editTags.includes(clean)) {
-                          setEditTags(prev => [...prev, clean]);
-                          setEditTagInput("");
-                        }
-                      }
-                    }}
-                    placeholder="Gõ tag và nhấn Enter..."
-                    className="flex-1 px-3 py-1.5 bg-zinc-900/80 border border-zinc-700 rounded-xl text-xs text-zinc-100 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const clean = editTagInput.trim().replace(/^#/, '');
-                      if (clean && !editTags.includes(clean)) {
-                        setEditTags(prev => [...prev, clean]);
-                        setEditTagInput("");
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-xl"
-                  >
-                    + Thêm
-                  </button>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-                {editingNote.id ? (
+                {/* Nút Xoá ghi chú (nếu sửa) */}
+                {editingNote.id && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1817,42 +1736,253 @@ export function NotesClient({
                         handleDeleteNote(editingNote);
                       }
                     }}
-                    className="px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-xl transition-colors flex items-center gap-1.5"
+                    className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors hidden sm:flex"
+                    title="Xoá ghi chú"
                   >
-                    <Trash2 size={14} />
-                    Xoá ghi chú
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => modalImageInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="px-3 py-2 text-xs text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-xl transition-colors flex items-center gap-1.5"
-                  >
-                    <Paperclip size={14} />
-                    {isUploading ? "Đang tải tệp..." : editingNote.image_url ? "Đổi tệp" : "Đính kèm tệp / ảnh"}
+                    <Trash2 size={16} />
                   </button>
                 )}
-                <div className="flex items-center gap-2">
+
+                {/* Nút Lưu */}
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="px-4 sm:px-5 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-colors flex items-center gap-1.5"
+                >
+                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  <span>{editingNote.id ? "Lưu" : "Tạo"}</span>
+                </button>
+              </div>
+            </header>
+
+            {/* Main Workspace Layout */}
+            <div className="flex-1 flex overflow-hidden relative">
+              
+              {/* MAIN CONTENT AREA - Không gian lớn, thoáng đãng để đọc và viết */}
+              <main 
+                onPaste={handlePasteInModal}
+                className="flex-1 overflow-y-auto p-4 sm:p-8 md:p-12 max-w-4xl mx-auto w-full flex flex-col space-y-4"
+              >
+                {/* Metadata Chips Bar (Hiển thị tóm tắt & bấm để mở chỉnh sửa) */}
+                <div className="flex flex-wrap items-center gap-2 pb-1">
+                  {editingNote.group_id && (
+                    <button
+                      type="button"
+                      onClick={() => setIsMetadataDrawerOpen(true)}
+                      className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 hover:bg-zinc-700 text-blue-300 text-xs rounded-lg border border-zinc-700 transition-colors"
+                    >
+                      <Folder size={12} className="text-blue-400" />
+                      <span>{groups.find(g => g.id === editingNote.group_id)?.name || "Nhóm"}</span>
+                    </button>
+                  )}
+                  {editTags.map(tagName => (
+                    <span
+                      key={tagName}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/15 text-blue-300 border border-blue-500/30 text-[11px] rounded-md"
+                    >
+                      #{tagName}
+                    </span>
+                  ))}
+                  {editingNote.color !== 'default' && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800/80 text-zinc-400 text-[11px] rounded-md border border-zinc-700">
+                      <span className={`w-2 h-2 rounded-full ${NOTE_COLORS.find(c => c.id === editingNote.color)?.bg || 'bg-zinc-600'}`} />
+                      <span>{NOTE_COLORS.find(c => c.id === editingNote.color)?.name}</span>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setIsNoteModalOpen(false)}
-                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold rounded-xl"
+                    onClick={() => setIsMetadataDrawerOpen(true)}
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 py-1 px-1.5 rounded hover:bg-zinc-800/50 transition-colors"
                   >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md"
-                  >
-                    {editingNote.id ? "Lưu Thay Đổi" : "Tạo Ghi Chú"}
+                    <Plus size={12} /> {(!editingNote.group_id && editTags.length === 0) ? "Thêm nhóm / tag" : "Chỉnh sửa"}
                   </button>
                 </div>
-              </div>
 
-            </form>
-          </div>
+                {/* Tiêu đề ghi chú (Seamless Borderless) */}
+                <input
+                  type="text"
+                  autoFocus={!editingNote.id}
+                  value={editingNote.title || ""}
+                  onChange={(e) => setEditingNote(prev => prev ? { ...prev, title: e.target.value } : null)}
+                  placeholder="Tiêu đề ghi chú..."
+                  className="w-full text-xl sm:text-2xl md:text-3xl font-bold text-zinc-100 placeholder:text-zinc-600 bg-transparent border-none outline-none tracking-tight pb-2"
+                />
+
+                {/* Tệp / Ảnh đính kèm (nếu có) */}
+                {editingNote.image_url && (
+                  <div className="py-2">
+                    <AttachmentDisplay
+                      url={editingNote.image_url}
+                      onRemove={() => setEditingNote(prev => prev ? { ...prev, image_url: null } : null)}
+                      onViewImage={setLightboxImage}
+                    />
+                  </div>
+                )}
+
+                {/* Nội dung ghi chú (Spacious, full height textarea) */}
+                <div className="flex-1 flex flex-col min-h-[350px]">
+                  <textarea
+                    value={editingNote.content || ""}
+                    onChange={(e) => setEditingNote(prev => prev ? { ...prev, content: e.target.value } : null)}
+                    placeholder="Bắt đầu viết nội dung ghi chú ở đây... (Hỗ trợ Ctrl+V dán hình ảnh hoặc kéo thả tệp)"
+                    className="w-full flex-1 bg-transparent text-zinc-200 placeholder:text-zinc-600 text-sm sm:text-base leading-relaxed md:leading-loose resize-none outline-none font-sans p-0 min-h-[350px]"
+                  />
+                </div>
+
+                {/* Bottom footer status */}
+                <div className="pt-4 border-t border-zinc-800/60 flex items-center justify-between text-xs text-zinc-500">
+                  <span>{editingNote.content ? `${editingNote.content.length} ký tự` : "0 ký tự"}</span>
+                  {editingNote.updated_at && (
+                    <span>Cập nhật: {new Date(editingNote.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} {new Date(editingNote.updated_at).toLocaleDateString('vi-VN')}</span>
+                  )}
+                </div>
+              </main>
+
+              {/* EXPANDABLE SETTINGS / PROPERTIES DRAWER (Tuỳ chọn mở rộng) */}
+              {isMetadataDrawerOpen && (
+                <>
+                  {/* Backdrop on mobile */}
+                  <div 
+                    className="md:hidden fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm"
+                    onClick={() => setIsMetadataDrawerOpen(false)}
+                  />
+
+                  {/* Sidebar Drawer on Desktop & Bottom Sheet on Mobile */}
+                  <aside className="fixed inset-x-0 bottom-0 z-[90] md:static md:z-auto md:w-80 bg-[#14191d] border-t md:border-t-0 md:border-l border-zinc-800 p-5 space-y-5 overflow-y-auto max-h-[80vh] md:max-h-full rounded-t-2xl md:rounded-none shadow-2xl animate-in slide-in-from-bottom md:slide-in-from-right duration-200">
+                    
+                    {/* Drawer Header */}
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                      <h4 className="font-bold text-sm text-zinc-100 flex items-center gap-2">
+                        <SlidersHorizontal size={14} className="text-blue-400" />
+                        Tuỳ Chọn Ghi Chú
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setIsMetadataDrawerOpen(false)}
+                        className="p-1 text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-zinc-800 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    {/* 1. Nhóm / Thư mục */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-zinc-400">Nhóm / Thư mục</label>
+                      <AutocompleteSearchBox
+                        value={editingNote.group_id || ""}
+                        onChange={(val) => setEditingNote(prev => prev ? { ...prev, group_id: val || null } : null)}
+                        items={groups.map(g => ({
+                          id: g.id,
+                          name: g.name,
+                          badge: groupedNotesMap.get(g.id)?.length
+                        }))}
+                        placement="bottom"
+                        className="w-full"
+                        onCreate={handleCreateGroupOnTheFly}
+                      />
+                    </div>
+
+                    {/* 2. Màu sắc thẻ */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-zinc-400">Màu sắc thẻ</label>
+                      <div className="flex items-center gap-2 py-1 flex-wrap">
+                        {NOTE_COLORS.map(c => (
+                          <button
+                            type="button"
+                            key={c.id}
+                            onClick={() => setEditingNote(prev => prev ? { ...prev, color: c.id } : null)}
+                            className={`w-7 h-7 rounded-full border transition-transform ${c.bg} ${editingNote.color === c.id ? 'scale-110 border-blue-400 ring-2 ring-blue-500/40' : 'border-zinc-700'}`}
+                            title={c.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 3. Thẻ Tags */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-zinc-400">Thẻ Tags</label>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {editTags.map(tagName => (
+                          <span key={tagName} className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                            #{tagName}
+                            <button type="button" onClick={() => setEditTags(prev => prev.filter(t => t !== tagName))} className="hover:text-red-400">
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editTagInput}
+                          onChange={(e) => setEditTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && editTagInput.trim()) {
+                              e.preventDefault();
+                              const clean = editTagInput.trim().replace(/^#/, '');
+                              if (clean && !editTags.includes(clean)) {
+                                setEditTags(prev => [...prev, clean]);
+                                setEditTagInput("");
+                              }
+                            }
+                          }}
+                          placeholder="Gõ tag và nhấn Enter..."
+                          className="flex-1 px-3 py-1.5 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-zinc-100 outline-none focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const clean = editTagInput.trim().replace(/^#/, '');
+                            if (clean && !editTags.includes(clean)) {
+                              setEditTags(prev => [...prev, clean]);
+                              setEditTagInput("");
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl"
+                        >
+                          + Thêm
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 4. Tệp đính kèm */}
+                    <div className="space-y-1.5 pt-2 border-t border-zinc-800">
+                      <label className="block text-xs font-semibold text-zinc-400">Tệp đính kèm</label>
+                      <button
+                        type="button"
+                        onClick={() => modalImageInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Paperclip size={14} />
+                        <span>{isUploading ? "Đang tải tệp lên..." : editingNote.image_url ? "Thay đổi tệp đính kèm" : "Chọn tệp từ máy / ảnh"}</span>
+                      </button>
+                    </div>
+
+                    {/* 5. Nút xoá trên mobile */}
+                    {editingNote.id && (
+                      <div className="pt-3 border-t border-zinc-800 md:hidden">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingNote) {
+                              setIsNoteModalOpen(false);
+                              handleDeleteNote(editingNote);
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 border border-red-500/20 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <Trash2 size={14} />
+                          Xoá ghi chú này
+                        </button>
+                      </div>
+                    )}
+                  </aside>
+                </>
+              )}
+
+            </div>
+          </form>
         </div>
       )}
 
