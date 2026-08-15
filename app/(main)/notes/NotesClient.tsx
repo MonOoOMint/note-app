@@ -929,7 +929,7 @@ export function NotesClient({
       if (!noteHasTag) return false;
     }
 
-    // Lọc theo thanh tìm kiếm (Tiêu đề, nội dung, tên tag)
+    // Lọc theo thanh tìm kiếm (Tiêu đề, nội dung, tên tag, tên nhóm, tên file đính kèm)
     if (isSearching) {
       const titleMatch = normalizeText(note.title || '').includes(normalizedQuery);
       const contentMatch = normalizeText(note.content || '').includes(normalizedQuery);
@@ -939,7 +939,11 @@ export function NotesClient({
         .filter(t => currentTagIds.includes(t.id))
         .some(t => normalizeText(t.name).includes(normalizedQuery));
 
-      if (!titleMatch && !contentMatch && !tagMatch) return false;
+      const group = groups.find(g => g.id === note.group_id);
+      const groupMatch = group ? normalizeText(group.name).includes(normalizedQuery) : false;
+      const fileMatch = note.image_url ? normalizeText(getFileNameFromUrl(note.image_url)).includes(normalizedQuery) : false;
+
+      if (!titleMatch && !contentMatch && !tagMatch && !groupMatch && !fileMatch) return false;
     }
 
     return true;
@@ -1165,11 +1169,21 @@ export function NotesClient({
               <Menu size={18} />
             </button>
             <h1 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-              {selectedFilter === 'all' && 'Tất cả ghi chú'}
-              {selectedFilter === 'pinned' && 'Ghi chú đã ghim ⭐'}
-              {selectedFilter === 'images' && 'Ghi chú có tệp đính kèm 📎'}
-              {selectedFilter.startsWith('group:') && (groups.find(g => g.id === selectedFilter.replace('group:', ''))?.name || 'Nhóm ghi chú')}
-              {selectedFilter.startsWith('tag:') && `#${tags.find(t => t.id === selectedFilter.replace('tag:', ''))?.name || 'Tag'}`}
+              {isSearching ? (
+                <>
+                  <Search size={16} className="text-blue-400" />
+                  <span className="truncate max-w-[200px] sm:max-w-md">Tìm: &quot;{searchQuery}&quot;</span>
+                  <span className="text-xs bg-blue-500/20 text-blue-300 font-mono px-2 py-0.5 rounded-full shrink-0">{filteredNotes.length}</span>
+                </>
+              ) : (
+                <>
+                  {selectedFilter === 'all' && 'Tất cả ghi chú'}
+                  {selectedFilter === 'pinned' && 'Ghi chú đã ghim ⭐'}
+                  {selectedFilter === 'images' && 'Ghi chú có tệp đính kèm 📎'}
+                  {selectedFilter.startsWith('group:') && (groups.find(g => g.id === selectedFilter.replace('group:', ''))?.name || 'Nhóm ghi chú')}
+                  {selectedFilter.startsWith('tag:') && `#${tags.find(t => t.id === selectedFilter.replace('tag:', ''))?.name || 'Tag'}`}
+                </>
+              )}
             </h1>
           </div>
 
@@ -1399,9 +1413,9 @@ export function NotesClient({
             )}
           </div>
 
-          {selectedFilter === 'all' ? (
+          {selectedFilter === 'all' && !isSearching ? (
             /* ========================================================
-               CHẾ ĐỘ ACCORDION (KHI XEM TẤT CẢ)
+               CHẾ ĐỘ ACCORDION (KHI XEM TẤT CẢ VÀ KHÔNG TÌM KIẾM)
                ======================================================== */
             <div className="space-y-4 pb-10">
               
@@ -1429,8 +1443,8 @@ export function NotesClient({
                 </div>
               )}
 
-              {/* 2. ACCORDION: CÁC NHÓM CHỦ ĐỀ */}
-              <DndContext id="notes-accordion-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEndDndKit}>
+              {/* 2. DANH SÁCH ACCORDION CÁC NHÓM */}
+              <DndContext id="notes-main-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEndDndKit}>
                 <SortableContext items={[...groups].sort((a, b) => a.order - b.order).map(g => `accordion-${g.id}`)} strategy={verticalListSortingStrategy}>
                   {[...groups].sort((a, b) => a.order - b.order).map(group => {
                     const groupNotes = groupedNotesMap.get(group.id) || [];
@@ -1530,45 +1544,72 @@ export function NotesClient({
             </div>
           ) : (
             /* ========================================================
-               CHẾ ĐỘ LỌC (FLAT VIEW - GIỮ NGUYÊN NHƯ CŨ)
+               CHẾ ĐỘ TÌM KIẾM / LỌC (FLAT VIEW TRỰC QUAN)
                ======================================================== */
-            <>
+            <div className="space-y-4 pb-10">
+              {/* Header thông tin tìm kiếm */}
+              {isSearching && (
+                <div className="flex items-center justify-between p-3 bg-[#161c20] border border-zinc-800 rounded-xl text-xs">
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <Search size={14} className="text-blue-400" />
+                    <span>
+                      Tìm thấy <strong className="text-blue-400 font-bold">{filteredNotes.length}</strong> kết quả cho <span className="text-zinc-100 font-semibold">&quot;{searchQuery}&quot;</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs text-zinc-400 hover:text-blue-400 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+                  >
+                    <X size={12} /> Xóa tìm kiếm
+                  </button>
+                </div>
+              )}
+
               {/* DANH SÁCH GHI CHÚ ĐÃ GHIM */}
               {pinnedNotes.length > 0 && (
                 <div className="space-y-3 mb-6">
                   <div className="flex items-center gap-2 text-xs font-bold text-amber-400/80 uppercase tracking-wider">
                     <Pin size={13} />
-                    <span>Đã ghim</span>
+                    <span>Đã ghim ({pinnedNotes.length})</span>
                   </div>
                   {renderNotesGrid(pinnedNotes)}
                 </div>
               )}
 
               {/* DANH SÁCH GHI CHÚ KHÁC */}
-              <div className="space-y-3 pb-10">
+              <div className="space-y-3">
                 {pinnedNotes.length > 0 && otherNotes.length > 0 && (
                   <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    Khác
+                    {isSearching ? `Kết quả khác (${otherNotes.length})` : "Khác"}
                   </div>
                 )}
 
                 {filteredNotes.length === 0 ? (
                   <div className="text-center py-16 text-zinc-500 space-y-3">
                     <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-800/40 border border-zinc-700/50 flex items-center justify-center text-zinc-400">
-                      <FileText size={24} />
+                      {isSearching ? <Search size={24} /> : <FileText size={24} />}
                     </div>
-                    <p className="text-sm font-medium text-zinc-400">
-                      {isSearching ? "Không tìm thấy ghi chú nào khớp với từ khóa" : "Chưa có ghi chú nào trong mục này"}
+                    <p className="text-sm font-semibold text-zinc-300">
+                      {isSearching ? `Không tìm thấy ghi chú nào khớp với "${searchQuery}"` : "Chưa có ghi chú nào trong mục này"}
                     </p>
-                    <p className="text-xs text-zinc-600 max-w-sm mx-auto">
-                      Hãy dùng khung soạn thảo phía trên để tạo ghi chú nhanh, paste ảnh chụp màn hình (Ctrl+V) hoặc kéo thả file.
-                    </p>
+                    {isSearching ? (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition-colors inline-block"
+                      >
+                        Xóa tìm kiếm
+                      </button>
+                    ) : (
+                      <p className="text-xs text-zinc-600 max-w-sm mx-auto">
+                        Hãy dùng khung soạn thảo phía trên để tạo ghi chú nhanh, paste ảnh chụp màn hình (Ctrl+V) hoặc kéo thả file.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   renderNotesGrid(otherNotes)
                 )}
               </div>
-            </>
+            </div>
           )}
 
         </div>
