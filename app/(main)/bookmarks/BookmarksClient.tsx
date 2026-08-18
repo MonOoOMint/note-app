@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { AlertModal } from "@/components/ui/AlertModal";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
+import { BuildTimeBadge } from "@/components/ui/BuildTimeBadge";
 
 interface Board {
   id: string;
@@ -1069,6 +1070,7 @@ export function BookmarksClient({
             );
           })}
         </div>
+        <BuildTimeBadge className="border-t border-gray-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/60" />
       </aside>
 
         {/* Main Content */}

@@ -37,6 +37,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
+import { BuildTimeBadge } from "@/components/ui/BuildTimeBadge";
 import {
   DndContext,
   closestCenter,
@@ -1179,6 +1180,7 @@ export function NotesClient({
             </div>
           )}
         </div>
+        <BuildTimeBadge className="border-t border-zinc-800 bg-[#121618]" />
       </aside>
 
       {/* NỘI DUNG CHÍNH (DANH SÁCH GHI CHÚ) */}

@@ -1,6 +1,7 @@
 import { Plus, List, CheckSquare, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SortableGroupItem } from "./SortableGroupItem";
+import { BuildTimeBadge } from "@/components/ui/BuildTimeBadge";
 import {
   DndContext,
   closestCenter,
@@ -191,8 +192,8 @@ export function TodoGroupSidebar({
         )}
       </div>
 
-      {/* Add new button at bottom */}
-      <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0 bg-white/40 dark:bg-zinc-950/40">
+      {/* Add new button & build time badge at bottom */}
+      <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0 bg-white/40 dark:bg-zinc-950/40 space-y-2">
         <button 
           type="button"
           className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 font-semibold text-xs md:text-sm rounded-xl transition-all border shadow-sm ${
@@ -205,6 +206,7 @@ export function TodoGroupSidebar({
           <Plus size={16} />
           <span>{mode === 'todo' ? "Tạo danh sách mới" : "Tạo Checklist mới"}</span>
         </button>
+        <BuildTimeBadge />
       </div>
     </div>
   );
