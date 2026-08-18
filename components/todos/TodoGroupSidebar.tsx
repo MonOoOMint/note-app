@@ -30,15 +30,22 @@ export function TodoGroupSidebar({
   groups = [],
   activeGroupId,
   mode,
+  groupCounts = {},
   onSelectGroup,
   onAddNew,
+  onEditGroup,
+  onDeleteGroup,
   onModeChange,
+  onUpdateGroupOrder,
 }: {
   groups?: Group[];
   activeGroupId?: string;
   mode: 'todo' | 'checklist';
+  groupCounts?: Record<string, number>;
   onSelectGroup: (id?: string) => void;
   onAddNew: () => void;
+  onEditGroup?: (group: Group) => void;
+  onDeleteGroup?: (group: Group) => void;
   onModeChange: (mode: 'todo' | 'checklist') => void;
   onUpdateGroupOrder?: (draggedId: string, targetId: string) => void;
 }) {
@@ -77,9 +84,9 @@ export function TodoGroupSidebar({
   };
 
   return (
-    <div className="w-full bg-transparent flex flex-col h-full">
+    <div className="w-full bg-transparent flex flex-col h-full overflow-hidden">
       {/* Segmented Mode Switcher */}
-      <div className="p-4 pb-2">
+      <div className="p-3 pb-2 shrink-0">
         <div className="grid grid-cols-2 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-inner">
           <button
             type="button"
@@ -109,21 +116,36 @@ export function TodoGroupSidebar({
         </div>
       </div>
 
-      {/* Header title */}
-      <div className="pt-3 pb-3 px-6 flex items-center justify-between">
-        <h2 className="font-bold text-lg md:text-xl tracking-tight text-zinc-900 dark:text-zinc-100">
-          {mode === 'todo' ? "Danh sách việc" : "Danh mục Checklist"}
-        </h2>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-semibold">
-          {filteredGroups.length}
-        </span>
+      {/* Header title with Quick Add Button */}
+      <div className="pt-2 pb-2 px-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <h2 className="font-bold text-sm md:text-base tracking-tight text-zinc-900 dark:text-zinc-100">
+            {mode === 'todo' ? "Danh sách việc" : "Danh mục Checklist"}
+          </h2>
+          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-semibold">
+            {filteredGroups.length}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onAddNew}
+          className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-colors border ${
+            mode === 'todo'
+              ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+              : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+          }`}
+          title={mode === 'todo' ? "Tạo danh sách việc mới" : "Tạo danh mục checklist mới"}
+        >
+          <Plus size={14} />
+          <span>Thêm</span>
+        </button>
       </div>
       
       {/* List items */}
-      <div className="flex-1 overflow-y-auto px-4 space-y-1 pb-4">
+      <div className="flex-1 overflow-y-auto px-3 space-y-1 pb-3">
         <button
           onClick={() => onSelectGroup(undefined)}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+          className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
             !activeGroupId
               ? mode === 'todo'
                 ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
@@ -135,7 +157,7 @@ export function TodoGroupSidebar({
           <span>{mode === 'todo' ? "Tất cả công việc" : "Tất cả Checklist"}</span>
         </button>
 
-        <div className="py-1"></div>
+        <div className="py-0.5"></div>
 
         <DndContext 
           id="todos-sidebar-dnd"
@@ -153,7 +175,10 @@ export function TodoGroupSidebar({
                 group={group}
                 isActive={activeGroupId === group.id}
                 mode={mode}
+                count={groupCounts[group.id] || 0}
                 onSelect={onSelectGroup}
+                onEdit={onEditGroup}
+                onDelete={onDeleteGroup}
               />
             ))}
           </SortableContext>
@@ -161,25 +186,25 @@ export function TodoGroupSidebar({
 
         {filteredGroups.length === 0 && (
           <div className="text-center py-6 px-4 text-xs text-zinc-400">
-            Chưa có danh mục nào. Bấm tạo mới bên dưới.
+            Chưa có danh mục nào. Bấm nút + Thêm ở trên để tạo mới.
           </div>
         )}
       </div>
 
-      {/* Add new button */}
-      <div className="p-4 pb-8 lg:pb-4 mt-auto border-t border-zinc-100 dark:border-zinc-800/50">
-        <Button 
-          variant="ghost" 
-          className={`w-full justify-start font-semibold rounded-xl transition-all ${
+      {/* Add new button at bottom */}
+      <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0 bg-white/40 dark:bg-zinc-950/40">
+        <button 
+          type="button"
+          className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 font-semibold text-xs md:text-sm rounded-xl transition-all border shadow-sm ${
             mode === 'todo' 
-              ? "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20" 
-              : "text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+              ? "text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/40" 
+              : "text-emerald-600 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-900/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
           }`}
           onClick={onAddNew}
         >
-          <Plus size={18} className="mr-2" />
-          {mode === 'todo' ? "Tạo danh sách mới" : "Tạo Checklist mới"}
-        </Button>
+          <Plus size={16} />
+          <span>{mode === 'todo' ? "Tạo danh sách mới" : "Tạo Checklist mới"}</span>
+        </button>
       </div>
     </div>
   );

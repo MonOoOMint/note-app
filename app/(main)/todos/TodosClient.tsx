@@ -303,6 +303,17 @@ export default function TodosClient({
     if (error) console.error(error);
   };
 
+  // Đếm số lượng task/checklist theo từng nhóm
+  const groupCounts = todos.reduce((acc, t) => {
+    if (t.group_id) {
+      const isChecklist = t.type === 'checklist';
+      if ((mode === 'checklist' && isChecklist) || (mode === 'todo' && !isChecklist)) {
+        acc[t.group_id] = (acc[t.group_id] || 0) + 1;
+      }
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
   // --- GROUP ACTIONS ---
   const handleSelectGroup = (id?: string) => {
     setActiveGroupId(id);
@@ -320,10 +331,12 @@ export default function TodosClient({
     setIsMobileMenuOpen(false);
   };
 
-  const openEditGroupModal = () => {
-    if (!activeGroup) return;
-    setEditingGroup({ id: activeGroup.id, name: activeGroup.name, description: activeGroup.description || "" });
+  const openEditGroupModal = (groupToEdit?: Group) => {
+    const g = groupToEdit || activeGroup;
+    if (!g) return;
+    setEditingGroup({ id: g.id, name: g.name, description: g.description || "" });
     setIsGroupModalOpen(true);
+    setIsMobileMenuOpen(false);
   };
 
   const handleSaveGroup = async (e: React.FormEvent) => {
@@ -375,24 +388,33 @@ export default function TodosClient({
     setIsGroupModalOpen(false);
   };
 
-  const handleDeleteGroup = () => {
-    if (!activeGroupId) return;
-    const groupName = activeGroup ? activeGroup.name : "danh mục này";
+  const handleDeleteGroup = (groupToDelete?: Group) => {
+    const target = groupToDelete || activeGroup;
+    if (!target) return;
+    const groupName = target.name || "danh mục này";
     
     setConfirmConfig({
       isOpen: true,
-      title: "Xoá danh mục",
-      message: `Bạn có chắc chắn muốn xoá "${groupName}" và toàn bộ các mục bên trong?`,
+      title: "Xác nhận xoá danh mục",
+      message: `Bạn có chắc chắn muốn xoá danh mục "${groupName}"? Các công việc bên trong sẽ không bị mất mà được chuyển về mục chung.`,
       confirmText: "Xoá danh mục",
       variant: "danger",
       onConfirm: async () => {
-        const idToDelete = activeGroupId;
-        setActiveGroupId(undefined);
-        setGroups(groups.filter(g => g.id !== idToDelete));
-        setTodos(todos.filter(t => t.group_id !== idToDelete));
-        
-        await supabase.from('groups').delete().eq('id', idToDelete);
-        setConfirmConfig({ ...confirmConfig, isOpen: false });
+        const idToDelete = target.id;
+        if (activeGroupId === idToDelete) {
+          setActiveGroupId(undefined);
+        }
+        setGroups(prev => prev.filter(g => g.id !== idToDelete));
+        const { error } = await supabase.from('groups').delete().eq('id', idToDelete);
+        if (error) {
+          console.error("Error deleting group:", error);
+          setAlertConfig({
+            isOpen: true,
+            title: "Lỗi xoá danh mục",
+            message: error.message || "Không thể xoá danh mục",
+            type: "error"
+          });
+        }
       },
     });
   };
@@ -529,9 +551,12 @@ export default function TodosClient({
           groups={groups}
           activeGroupId={activeGroupId}
           mode={mode}
+          groupCounts={groupCounts}
           onSelectGroup={setActiveGroupId}
           onAddNew={openNewGroupModal}
-          onModeChange={setMode}
+          onEditGroup={openEditGroupModal}
+          onDeleteGroup={handleDeleteGroup}
+          onModeChange={handleModeChange}
           onUpdateGroupOrder={handleUpdateGroupOrder}
         />
       </div>
@@ -556,12 +581,15 @@ export default function TodosClient({
                groups={groups}
                activeGroupId={activeGroupId}
                mode={mode}
+               groupCounts={groupCounts}
                onSelectGroup={(id) => {
                  setActiveGroupId(id);
                  setIsMobileMenuOpen(false);
                }}
                onAddNew={openNewGroupModal}
-               onModeChange={setMode}
+               onEditGroup={openEditGroupModal}
+               onDeleteGroup={handleDeleteGroup}
+               onModeChange={handleModeChange}
                onUpdateGroupOrder={handleUpdateGroupOrder}
              />
           </div>
@@ -581,11 +609,17 @@ export default function TodosClient({
                   >
                     <Menu size={22} />
                   </button>
-                  <h1 className={`text-2xl lg:text-3xl font-bold tracking-tight truncate ${
-                    mode === 'checklist' 
-                      ? "text-emerald-600 dark:text-emerald-400" 
-                      : "text-blue-600 dark:text-blue-500"
-                  }`}>
+                  <h1 
+                    onClick={activeGroup ? () => openEditGroupModal(activeGroup) : undefined}
+                    className={`text-2xl lg:text-3xl font-bold tracking-tight truncate ${
+                      activeGroup ? "cursor-pointer hover:opacity-80 transition-opacity" : ""
+                    } ${
+                      mode === 'checklist' 
+                        ? "text-emerald-600 dark:text-emerald-400" 
+                        : "text-blue-600 dark:text-blue-500"
+                    }`}
+                    title={activeGroup ? "Bấm để đổi tên hoặc sửa mô tả danh mục" : undefined}
+                  >
                     {activeGroup 
                       ? activeGroup.name 
                       : mode === 'checklist' ? "Tất cả Checklist" : "Tất cả công việc"
@@ -602,6 +636,24 @@ export default function TodosClient({
             
             {/* Header Action Buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
+              {/* Quick Create Group Button when on All View */}
+              {!activeGroup && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => openNewGroupModal()}
+                  className={`text-xs h-8 px-2.5 rounded-lg flex items-center gap-1 border transition-colors ${
+                    mode === 'todo'
+                      ? "text-blue-600 dark:text-blue-400 bg-blue-50/60 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-900/40 hover:bg-blue-100"
+                      : "text-emerald-600 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-900/40 hover:bg-emerald-100"
+                  }`}
+                  title={mode === 'todo' ? "Tạo danh sách việc mới" : "Tạo danh mục checklist mới"}
+                >
+                  <Plus size={14} />
+                  <span className="hidden sm:inline">{mode === 'todo' ? "Tạo danh sách" : "Tạo danh mục"}</span>
+                </Button>
+              )}
+
               {mode === 'checklist' ? (
                 /* Checklist Action Buttons */
                 <>
@@ -654,7 +706,7 @@ export default function TodosClient({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    onClick={openEditGroupModal} 
+                    onClick={() => openEditGroupModal(activeGroup)} 
                     className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 w-8 h-8 rounded-lg" 
                     title="Sửa danh mục"
                   >
@@ -663,7 +715,7 @@ export default function TodosClient({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    onClick={handleDeleteGroup} 
+                    onClick={() => handleDeleteGroup(activeGroup)} 
                     className="text-zinc-500 hover:text-red-500 w-8 h-8 rounded-lg" 
                     title="Xoá danh mục"
                   >
