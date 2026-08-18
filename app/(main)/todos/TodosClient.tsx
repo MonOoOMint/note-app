@@ -12,7 +12,8 @@ import {
   CheckCheck, 
   Trash,
   CheckSquare,
-  Sparkles
+  Sparkles,
+  Plus
 } from "lucide-react";
 import { TodoGroupSidebar, Group } from "@/components/todos/TodoGroupSidebar";
 import { TodoInput } from "@/components/todos/TodoInput";
