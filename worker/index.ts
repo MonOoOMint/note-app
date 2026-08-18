@@ -1,6 +1,14 @@
 /// <reference lib="webworker" />
 declare const self: ServiceWorkerGlobalScope;
 
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? { title: "Nhắc nhở công việc!", body: "Bạn có công việc cần hoàn thành." };
   

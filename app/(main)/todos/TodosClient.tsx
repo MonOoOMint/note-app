@@ -351,7 +351,7 @@ export default function TodosClient({
       }).eq('id', editingGroup.id).select().single();
 
       if (data && !error) {
-        setGroups(groups.map(g => g.id === editingGroup.id ? data : g));
+        setGroups(prev => prev.map(g => g.id === editingGroup.id ? data : g));
       } else if (error) {
         console.error("Error updating group:", error);
         setAlertConfig({
@@ -373,7 +373,7 @@ export default function TodosClient({
       }).select().single();
 
       if (data && !error) {
-        setGroups([...groups, data]);
+        setGroups(prev => [...prev, data]);
         setActiveGroupId(data.id);
       } else if (error) {
         console.error("Error creating group:", error);
