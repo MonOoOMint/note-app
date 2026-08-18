@@ -163,6 +163,7 @@ export default function TodosClient({
 
   // --- ACTIONS CHO TODO (CÔNG VIỆC) ---
   const handleAddTodo = async (content: string, dueDate?: string, recurrence?: "none" | "daily" | "weekly", weeklyDays?: number[]) => {
+    const newOrder = displayItems.length;
     const { data, error } = await supabase.from('todos').insert({
       user_id: userId,
       group_id: activeGroupId || null, 
@@ -172,18 +173,25 @@ export default function TodosClient({
       due_date: dueDate || null,
       recurrence: recurrence || 'none',
       weekly_days: weeklyDays || [],
-      order: todos.length
+      order: newOrder
     }).select().single();
 
     if (data && !error) {
-      setTodos([...todos, data]); // Đưa vào cuối thay vì đầu do sắp xếp theo order
-    } else {
-      console.error(error);
+      setTodos(prev => [...prev, data]);
+    } else if (error) {
+      console.error("Error adding todo:", error);
+      setAlertConfig({
+        isOpen: true,
+        title: "Lỗi thêm công việc",
+        message: error.message || "Không thể thêm công việc",
+        type: "error"
+      });
     }
   };
 
   // --- ACTIONS CHO CHECKLIST (DANH SÁCH KIỂM TRA) ---
   const handleAddChecklist = async (content: string) => {
+    const newOrder = displayItems.length;
     const { data, error } = await supabase.from('todos').insert({
       user_id: userId,
       group_id: activeGroupId || null,
@@ -192,13 +200,20 @@ export default function TodosClient({
       type: 'checklist',
       due_date: null,
       recurrence: 'none',
-      weekly_days: []
+      weekly_days: [],
+      order: newOrder
     }).select().single();
 
     if (data && !error) {
-      setTodos([data, ...todos]);
-    } else {
-      console.error(error);
+      setTodos(prev => [...prev, data]);
+    } else if (error) {
+      console.error("Error adding checklist item:", error);
+      setAlertConfig({
+        isOpen: true,
+        title: "Lỗi thêm mục kiểm tra",
+        message: error.message || "Không thể thêm mục kiểm tra",
+        type: "error"
+      });
     }
   };
 
@@ -322,21 +337,39 @@ export default function TodosClient({
         description: editingGroup.description.trim()
       }).eq('id', editingGroup.id).select().single();
 
-      if (data) {
+      if (data && !error) {
         setGroups(groups.map(g => g.id === editingGroup.id ? data : g));
+      } else if (error) {
+        console.error("Error updating group:", error);
+        setAlertConfig({
+          isOpen: true,
+          title: "Lỗi cập nhật",
+          message: error.message || "Không thể cập nhật danh mục",
+          type: "error"
+        });
       }
     } else {
       // Create with active mode type
+      const currentModeGroups = groups.filter(g => (mode === 'checklist' ? g.type === 'checklist' : (!g.type || g.type === 'todo')));
       const { data, error } = await supabase.from('groups').insert({
         user_id: userId,
         name: editingGroup.name.trim(),
         description: editingGroup.description.trim(),
-        type: mode
+        type: mode,
+        order: currentModeGroups.length
       }).select().single();
 
-      if (data) {
+      if (data && !error) {
         setGroups([...groups, data]);
         setActiveGroupId(data.id);
+      } else if (error) {
+        console.error("Error creating group:", error);
+        setAlertConfig({
+          isOpen: true,
+          title: "Lỗi tạo danh mục",
+          message: error.message || "Không thể tạo danh mục mới",
+          type: "error"
+        });
       }
     }
     setIsGroupModalOpen(false);
@@ -497,7 +530,7 @@ export default function TodosClient({
           activeGroupId={activeGroupId}
           mode={mode}
           onSelectGroup={setActiveGroupId}
-          onAddNew={() => setIsGroupModalOpen(true)}
+          onAddNew={openNewGroupModal}
           onModeChange={setMode}
           onUpdateGroupOrder={handleUpdateGroupOrder}
         />
@@ -527,7 +560,7 @@ export default function TodosClient({
                  setActiveGroupId(id);
                  setIsMobileMenuOpen(false);
                }}
-               onAddNew={() => setIsGroupModalOpen(true)}
+               onAddNew={openNewGroupModal}
                onModeChange={setMode}
                onUpdateGroupOrder={handleUpdateGroupOrder}
              />
@@ -621,7 +654,7 @@ export default function TodosClient({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    onClick={() => setIsGroupModalOpen(true)} 
+                    onClick={openEditGroupModal} 
                     className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 w-8 h-8 rounded-lg" 
                     title="Sửa danh mục"
                   >
