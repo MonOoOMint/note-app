@@ -1,0 +1,15 @@
+name: Scheduled Todo Notifications
+
+on:
+  schedule:
+    # 8h, 11h, 13h, 16h, 19h (GMT+7) => 1h, 4h, 6h, 9h, 12h (UTC)
+    - cron: '0 1,4,6,9,12 * * *'
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Notification Cron Endpoint
+        run: |
+          curl -s "https://note-app-wheat-gamma.vercel.app/api/cron/reset" || true
