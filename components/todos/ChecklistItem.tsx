@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Trash2, Edit2, Folder, CheckSquare, Square } from "lucide-react";
+import { Check, Trash2, Edit2, Folder } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export interface ChecklistItemType {

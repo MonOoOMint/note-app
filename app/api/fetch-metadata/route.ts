@@ -37,15 +37,15 @@ export async function POST(req: Request) {
     if (faviconUrl) {
       try {
         faviconUrl = new URL(faviconUrl, finalUrl).href;
-      } catch (e) {
-        console.warn("Invalid favicon URL format", e);
+      } catch {
+        console.warn("Invalid favicon URL format");
       }
     } else {
       // Fallback
       try {
         const urlObj = new URL(finalUrl);
         faviconUrl = `${urlObj.protocol}//${urlObj.hostname}/favicon.ico`;
-      } catch (e) {
+      } catch {
         faviconUrl = "";
       }
     }

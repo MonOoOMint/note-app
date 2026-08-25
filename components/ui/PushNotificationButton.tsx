@@ -24,7 +24,6 @@ function urlBase64ToUint8Array(base64String: string) {
 export function PushNotificationButton({ userId }: { userId: string }) {
   const [mounted, setMounted] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [loading, setLoading] = useState(true);
   const [alertConfig, setAlertConfig] = useState<{
@@ -41,10 +40,6 @@ export function PushNotificationButton({ userId }: { userId: string }) {
 
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && (window as any).workbox !== undefined) {
-      // Ignore if next-pwa handles it, or register manually if needed
-    }
-    
     // Register SW manually for Push if next-pwa didn't expose it easily
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js').then(reg => {
@@ -52,7 +47,6 @@ export function PushNotificationButton({ userId }: { userId: string }) {
         reg.pushManager.getSubscription().then(sub => {
           if (sub) {
             setIsSubscribed(true);
-            setSubscription(sub);
           }
           setLoading(false);
         });
@@ -103,7 +97,6 @@ export function PushNotificationButton({ userId }: { userId: string }) {
         }
 
         setIsSubscribed(true);
-        setSubscription(sub);
       }
     } catch (err) {
       console.error("Failed to subscribe", err);

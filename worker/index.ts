@@ -1,38 +1,40 @@
 /// <reference lib="webworker" />
-declare const self: ServiceWorkerGlobalScope;
+export {};
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
+const serviceWorker = globalThis as unknown as ServiceWorkerGlobalScope;
+
+serviceWorker.addEventListener("install", (event) => {
+  event.waitUntil(serviceWorker.skipWaiting());
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+serviceWorker.addEventListener("activate", (event) => {
+  event.waitUntil(serviceWorker.clients.claim());
 });
 
-self.addEventListener("push", (event) => {
+serviceWorker.addEventListener("push", (event) => {
   const data = event.data?.json() ?? { title: "Nhắc nhở công việc!", body: "Bạn có công việc cần hoàn thành." };
   
   event.waitUntil(
-    self.registration.showNotification(data.title, {
+    serviceWorker.registration.showNotification(data.title, {
       body: data.body,
       icon: data.icon || "/icon.svg",
       badge: "/icon.svg",
       vibrate: [200, 100, 200],
-    })
+    } as NotificationOptions)
   );
 });
 
-self.addEventListener("notificationclick", (event) => {
+serviceWorker.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
-    self.clients.matchAll({ type: "window" }).then((clientList) => {
+    serviceWorker.clients.matchAll({ type: "window" }).then((clientList) => {
       for (const client of clientList) {
         if ("focus" in client) {
           return client.focus();
         }
       }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow("/todos");
+      if (serviceWorker.clients.openWindow) {
+        return serviceWorker.clients.openWindow("/todos");
       }
     })
   );

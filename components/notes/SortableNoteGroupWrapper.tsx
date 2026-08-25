@@ -2,12 +2,14 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+type SortableHookResult = ReturnType<typeof useSortable>;
+
 interface SortableNoteGroupWrapperProps {
   id: string; // The dnd-kit id (e.g., 'sidebar-123')
   children: (props: {
     setNodeRef: (node: HTMLElement | null) => void;
-    attributes: React.HTMLAttributes<any>;
-    listeners: React.DOMAttributes<any>;
+    attributes: SortableHookResult['attributes'];
+    listeners: NonNullable<SortableHookResult['listeners']>;
     style: React.CSSProperties;
     isDragging: boolean;
   }) => React.ReactNode;
@@ -31,5 +33,5 @@ export function SortableNoteGroupWrapper({ id, children }: SortableNoteGroupWrap
     position: 'relative' as const,
   };
 
-  return <>{children({ setNodeRef, attributes, listeners, style, isDragging })}</>;
+  return <>{children({ setNodeRef, attributes, listeners: listeners ?? {}, style, isDragging })}</>;
 }

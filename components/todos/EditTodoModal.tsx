@@ -50,7 +50,7 @@ export function EditTodoModal({
       due_date: dueDate || null,
       recurrence,
       weekly_days: recurrence === 'weekly' ? weeklyDays : null,
-    } as any);
+    });
   };
 
   const toggleDay = (day: number) => {
@@ -111,7 +111,7 @@ export function EditTodoModal({
                       onChange={(e) => setDueDate(e.target.value)}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20"
                       style={{ WebkitAppearance: 'none' }}
-                      onClick={(e) => 'showPicker' in HTMLInputElement.prototype && (e.currentTarget as any).showPicker()}
+                      onClick={(e) => e.currentTarget.showPicker?.()}
                     />
                     <button 
                       type="button" 
@@ -128,7 +128,7 @@ export function EditTodoModal({
                       type="date" 
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      onClick={(e) => 'showPicker' in HTMLInputElement.prototype && (e.currentTarget as any).showPicker()}
+                      onClick={(e) => e.currentTarget.showPicker?.()}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20"
                       style={{ WebkitAppearance: 'none' }}
                     />

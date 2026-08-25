@@ -7,9 +7,7 @@ import {
   Search, 
   X, 
   Pin, 
-  Image as ImageIcon, 
   Tag as TagIcon, 
-  FolderPlus, 
   Edit2, 
   Trash2, 
   Copy, 
@@ -32,9 +30,8 @@ import {
   FileSpreadsheet,
   ArrowLeft,
   Loader2,
-  Settings2
+  Image as ImageIcon
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
 import { BuildTimeBadge } from "@/components/ui/BuildTimeBadge";
@@ -49,12 +46,10 @@ import {
   TouchSensor
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { PushNotificationButton } from "@/components/ui/PushNotificationButton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { AlertModal } from "@/components/ui/AlertModal";
 
@@ -154,6 +149,68 @@ export function getFileNameFromUrl(url?: string | null): string {
   } catch {
     return 'Tệp đính kèm';
   }
+}
+
+// Trích xuất tất cả ảnh markdown trong nội dung (![alt](url))
+export function extractMarkdownImages(content?: string | null): { alt: string; url: string; match: string }[] {
+  if (!content) return [];
+  const regex = /!\[(.*?)\]\(((?:https?:\/\/|data:image\/|\/)[^\s\)]+)\)/g;
+  const images: { alt: string; url: string; match: string }[] = [];
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    images.push({
+      alt: match[1] || 'Hình ảnh',
+      url: match[2],
+      match: match[0]
+    });
+  }
+  return images;
+}
+
+// Xóa cú pháp ảnh markdown khỏi nội dung để lấy văn bản thuần hiển thị gọn gàng
+export function stripMarkdownImages(content?: string | null): string {
+  if (!content) return "";
+  return content.replace(/!\[(.*?)\]\(((?:https?:\/\/|data:image\/|\/)[^\s\)]+)\)/g, "").trim();
+}
+
+// Kiểm tra ghi chú có chứa tệp đính kèm hoặc ảnh trong nội dung không
+export function hasImagesOrAttachments(note: Note): boolean {
+  if (note.image_url) return true;
+  if (!note.content) return false;
+  return extractMarkdownImages(note.content).length > 0;
+}
+
+// Gỡ một ảnh markdown cụ thể khỏi chuỗi nội dung
+export function removeMarkdownImage(content: string, urlToRemove: string): string {
+  if (!content) return "";
+  const escapedUrl = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`!\\[.*?\\]\\(${escapedUrl}\\)\\n?`, 'g');
+  return content.replace(regex, '').trim();
+}
+
+// Chèn văn bản vào vị trí con trỏ chuột trong ô textarea
+export function insertTextAtCursor(
+  textarea: HTMLTextAreaElement | null,
+  currentText: string,
+  textToInsert: string
+): { newText: string; newCursorPos: number } {
+  if (!textarea) {
+    const newText = currentText ? `${currentText}\n${textToInsert}` : textToInsert;
+    return { newText, newCursorPos: newText.length };
+  }
+
+  const start = textarea.selectionStart ?? currentText.length;
+  const end = textarea.selectionEnd ?? currentText.length;
+  const before = currentText.substring(0, start);
+  const after = currentText.substring(end);
+
+  const prefix = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+  const suffix = after.length > 0 && !after.startsWith('\n') ? '\n' : '';
+  const insertion = `${prefix}${textToInsert}${suffix}`;
+  const newText = `${before}${insertion}${after}`;
+  const newCursorPos = start + insertion.length;
+
+  return { newText, newCursorPos };
 }
 
 // Component hiển thị tệp đính kèm / hình ảnh đa năng
@@ -319,7 +376,7 @@ function formatRelativeTime(dateStr: string) {
     if (diffDay === 1) return 'Hôm qua';
     if (diffDay < 7) return `${diffDay} ngày trước`;
     return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch (e) {
+  } catch {
     return '';
   }
 }
@@ -392,8 +449,12 @@ export function NotesClient({
   const [newImageUrl, setNewImageUrl] = useState<string | null>(initialSharedImage || null);
   const [isUploading, setIsUploading] = useState(false);
   const composerRef = useRef<HTMLDivElement>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerContentImageInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const modalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const modalImageInputRef = useRef<HTMLInputElement>(null);
+  const modalContentImageInputRef = useRef<HTMLInputElement>(null);
 
   // Modals state
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -405,32 +466,6 @@ export function NotesClient({
 
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<{ id?: string; name: string } | null>(null);
-
-  // Drag & Drop State cho việc sắp xếp Group
-  const dragGroupRef = useRef<string | null>(null);
-  const [draggedGroup, setDraggedGroup] = useState<string | null>(null);
-  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
-
-  // Global fallback để chống kẹt trạng thái kéo thả (đặc biệt trên giả lập mobile)
-  useEffect(() => {
-    const handleGlobalDragEnd = () => {
-      if (dragGroupRef.current) {
-        dragGroupRef.current = null;
-        setDraggedGroup(null);
-        setDragOverGroup(null);
-      }
-    };
-    
-    window.addEventListener('mouseup', handleGlobalDragEnd);
-    window.addEventListener('touchend', handleGlobalDragEnd);
-    window.addEventListener('dragend', handleGlobalDragEnd);
-    
-    return () => {
-      window.removeEventListener('mouseup', handleGlobalDragEnd);
-      window.removeEventListener('touchend', handleGlobalDragEnd);
-      window.removeEventListener('dragend', handleGlobalDragEnd);
-    };
-  }, []);
 
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -469,7 +504,7 @@ export function NotesClient({
       if (savedView === 'grid' || savedView === 'list') {
         setViewMode(savedView);
       }
-    } catch (e) {}
+    } catch {}
   }, []);
 
   // Xử lý thông báo khi nhận dữ liệu chia sẻ thành công
@@ -506,9 +541,8 @@ export function NotesClient({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [newTitle, newContent, newImageUrl]);
 
-  // Xử lý upload ảnh & tệp đính kèm
+  // Xử lý upload ảnh & tệp đính kèm đơn lẻ
   const uploadImageFile = async (file: File): Promise<string | null> => {
-    setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -519,69 +553,167 @@ export function NotesClient({
       const data = await res.json();
       if (data.url) return data.url;
       return null;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Không thể tải tệp lên";
       setAlertConfig({
         isOpen: true,
         title: "Lỗi tải tệp",
-        message: err.message || "Không thể tải tệp lên",
+        message,
         type: "error"
       });
       return null;
+    }
+  };
+
+  // Upload nhiều file ảnh đồng thời
+  const uploadMultipleImages = async (files: File[]): Promise<string[]> => {
+    if (files.length === 0) return [];
+    setIsUploading(true);
+    try {
+      const uploadPromises = files.map(file => uploadImageFile(file));
+      const results = await Promise.all(uploadPromises);
+      return results.filter((url): url is string => Boolean(url));
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Xử lý Dán ảnh / tệp bằng Ctrl + V
+  // Xử lý Dán ảnh / tệp bằng Ctrl + V trong Khung tạo ghi chú nhanh
   const handlePaste = async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].kind === 'file') {
-        e.preventDefault();
-        setIsComposerExpanded(true);
-        const file = items[i].getAsFile();
+    const items = Array.from(e.clipboardData.items);
+    const imageFiles: File[] = [];
+    let nonImageFile: File | null = null;
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
         if (file) {
-          const url = await uploadImageFile(file);
-          if (url) setNewImageUrl(url);
+          if (file.type.startsWith('image/')) {
+            imageFiles.push(file);
+          } else if (!nonImageFile) {
+            nonImageFile = file;
+          }
         }
-        return;
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      setIsComposerExpanded(true);
+      const urls = await uploadMultipleImages(imageFiles);
+      if (urls.length > 0) {
+        const markdown = urls.map(u => `![Hình ảnh](${u})`).join('\n');
+        setNewContent(prev => {
+          const { newText } = insertTextAtCursor(composerTextareaRef.current, prev, markdown);
+          return newText;
+        });
+      }
+      return;
+    }
+
+    if (nonImageFile) {
+      e.preventDefault();
+      setIsComposerExpanded(true);
+      setIsUploading(true);
+      try {
+        const url = await uploadImageFile(nonImageFile);
+        if (url) setNewImageUrl(url);
+      } finally {
+        setIsUploading(false);
       }
     }
   };
 
-  // Xử lý Kéo thả ảnh & tài liệu (Drag and Drop)
+  // Xử lý Kéo thả ảnh & tài liệu (Drag and Drop) trong Khung tạo ghi chú nhanh
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    const nonImageFiles = files.filter(f => !f.type.startsWith('image/'));
+
+    if (imageFiles.length > 0) {
       setIsComposerExpanded(true);
-      const url = await uploadImageFile(file);
-      if (url) setNewImageUrl(url);
+      const urls = await uploadMultipleImages(imageFiles);
+      if (urls.length > 0) {
+        const markdown = urls.map(u => `![Hình ảnh](${u})`).join('\n');
+        setNewContent(prev => {
+          const { newText } = insertTextAtCursor(composerTextareaRef.current, prev, markdown);
+          return newText;
+        });
+      }
+    }
+
+    if (nonImageFiles.length > 0 && !newImageUrl) {
+      setIsComposerExpanded(true);
+      setIsUploading(true);
+      try {
+        const url = await uploadImageFile(nonImageFiles[0]);
+        if (url) setNewImageUrl(url);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  // Xử lý chọn nhiều ảnh để chèn vào nội dung ở Quick Composer
+  const handleComposerContentImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      const urls = await uploadMultipleImages(files);
+      if (urls.length > 0) {
+        const markdown = urls.map(u => `![Hình ảnh](${u})`).join('\n');
+        setNewContent(prev => {
+          const { newText } = insertTextAtCursor(composerTextareaRef.current, prev, markdown);
+          return newText;
+        });
+      }
+      e.target.value = '';
     }
   };
 
   // Tạo thẻ tag mới hoặc lấy tag đã có
   const getOrCreateTags = async (tagNames: string[]): Promise<Tag[]> => {
+    const cleanNames = Array.from(new Set(
+      tagNames
+        .map(name => name.trim().replace(/^#/, '').toLowerCase())
+        .filter(Boolean)
+    ));
+    const knownTags = new Map(tags.map(tag => [tag.name.toLowerCase(), tag]));
     const resultTags: Tag[] = [];
-    for (const rawName of tagNames) {
-      const cleanName = rawName.trim().replace(/^#/, '').toLowerCase();
-      if (!cleanName) continue;
+    const createdTags: Tag[] = [];
 
-      let existing = tags.find(t => t.name.toLowerCase() === cleanName);
+    for (const cleanName of cleanNames) {
+      const existing = knownTags.get(cleanName);
       if (existing) {
         resultTags.push(existing);
-      } else {
-        const { data, error } = await supabase.from('tags').insert({
-          user_id: userId,
-          name: cleanName
-        }).select().single();
-
-        if (data) {
-          resultTags.push(data);
-          setTags(prev => [...prev, data]);
-        }
+        continue;
       }
+
+      const { data, error } = await supabase
+        .from('tags')
+        .upsert({ user_id: userId, name: cleanName }, { onConflict: 'user_id,name' })
+        .select()
+        .single();
+
+      if (error || !data) {
+        throw error || new Error(`Không thể tạo tag #${cleanName}`);
+      }
+
+      const createdTag = data as Tag;
+      knownTags.set(cleanName, createdTag);
+      createdTags.push(createdTag);
+      resultTags.push(createdTag);
     }
+
+    if (createdTags.length > 0) {
+      setTags(prev => {
+        const existingIds = new Set(prev.map(tag => tag.id));
+        return [...prev, ...createdTags.filter(tag => !existingIds.has(tag.id))];
+      });
+    }
+
     return resultTags;
   };
 
@@ -590,48 +722,34 @@ export function NotesClient({
     if (!newTitle.trim() && !newContent.trim() && !newImageUrl) return;
 
     const noteType = newImageUrl ? 'image' : 'text';
-    const notePayload = {
-      user_id: userId,
-      group_id: newGroupId || null,
-      title: newTitle.trim() || null,
-      content: newContent.trim() || null,
-      type: noteType,
-      image_url: newImageUrl,
-      color: newColor,
-      is_pinned: newIsPinned,
-      order: 0
-    };
+    try {
+      const resolvedTags = await getOrCreateTags(newSelectedTags);
+      const tagIds = resolvedTags.map(tag => tag.id);
+      const { data: createdNote, error } = await supabase
+        .rpc('create_note_with_tags', {
+          p_group_id: newGroupId || null,
+          p_title: newTitle.trim() || null,
+          p_content: newContent.trim() || null,
+          p_type: noteType,
+          p_image_url: newImageUrl,
+          p_source_app: null,
+          p_color: newColor,
+          p_is_pinned: newIsPinned,
+          p_order: 0,
+          p_tag_ids: tagIds
+        })
+        .single();
 
-    const { data: createdNote, error } = await supabase
-      .from('notes')
-      .insert(notePayload)
-      .select()
-      .single();
-
-    if (error) {
-      setAlertConfig({
-        isOpen: true,
-        title: "Lỗi lưu ghi chú",
-        message: error.message,
-        type: "error"
-      });
-      return;
-    }
-
-    if (createdNote) {
-      // Xử lý lưu Tags
-      if (newSelectedTags.length > 0) {
-        const resolvedTags = await getOrCreateTags(newSelectedTags);
-        const tagInserts = resolvedTags.map(t => ({ note_id: createdNote.id, tag_id: t.id }));
-        if (tagInserts.length > 0) {
-          await supabase.from('note_tags').insert(tagInserts);
-          setNoteTags(prev => [...prev, ...tagInserts]);
-        }
+      if (error || !createdNote) {
+        throw error || new Error('Không thể tạo ghi chú');
       }
 
-      setNotes(prev => [createdNote, ...prev]);
+      const note = createdNote as Note;
+      const tagLinks = tagIds.map(tagId => ({ note_id: note.id, tag_id: tagId }));
+      setNoteTags(prev => [...prev, ...tagLinks]);
+      setNotes(prev => [note, ...prev]);
 
-      // Reset form
+      // Reset form only after the transaction succeeds.
       setNewTitle("");
       setNewContent("");
       setNewImageUrl(null);
@@ -640,6 +758,14 @@ export function NotesClient({
       setNewColor("default");
       setNewIsPinned(false);
       setIsComposerExpanded(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể lưu ghi chú";
+      setAlertConfig({
+        isOpen: true,
+        title: "Lỗi lưu ghi chú",
+        message,
+        type: "error"
+      });
     }
   };
 
@@ -654,18 +780,102 @@ export function NotesClient({
     setIsNoteModalOpen(true);
   };
 
+  // Xử lý Dán ảnh / tệp bằng Ctrl + V trong Modal Ghi chú
   const handlePasteInModal = async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf("image") !== -1) {
-        e.preventDefault();
-        const file = items[i].getAsFile();
+    const items = Array.from(e.clipboardData.items);
+    const imageFiles: File[] = [];
+    let nonImageFile: File | null = null;
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
         if (file) {
-          const url = await uploadImageFile(file);
-          if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+          if (file.type.startsWith('image/')) {
+            imageFiles.push(file);
+          } else if (!nonImageFile) {
+            nonImageFile = file;
+          }
         }
-        return;
       }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      const urls = await uploadMultipleImages(imageFiles);
+      if (urls.length > 0) {
+        const markdown = urls.map(u => `![Hình ảnh](${u})`).join('\n');
+        setEditingNote(prev => {
+          if (!prev) return null;
+          const currentContent = prev.content || "";
+          const { newText } = insertTextAtCursor(modalTextareaRef.current, currentContent, markdown);
+          return { ...prev, content: newText };
+        });
+      }
+      return;
+    }
+
+    if (nonImageFile) {
+      e.preventDefault();
+      if (editingNote && !editingNote.image_url) {
+        setIsUploading(true);
+        try {
+          const url = await uploadImageFile(nonImageFile);
+          if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+        } finally {
+          setIsUploading(false);
+        }
+      }
+    }
+  };
+
+  // Xử lý Kéo thả ảnh & tài liệu (Drag and Drop) trong Modal Ghi chú
+  const handleDropInModal = async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    const nonImageFiles = files.filter(f => !f.type.startsWith('image/'));
+
+    if (imageFiles.length > 0) {
+      const urls = await uploadMultipleImages(imageFiles);
+      if (urls.length > 0) {
+        const markdown = urls.map(u => `![Hình ảnh](${u})`).join('\n');
+        setEditingNote(prev => {
+          if (!prev) return null;
+          const currentContent = prev.content || "";
+          const { newText } = insertTextAtCursor(modalTextareaRef.current, currentContent, markdown);
+          return { ...prev, content: newText };
+        });
+      }
+    }
+
+    if (nonImageFiles.length > 0 && editingNote && !editingNote.image_url) {
+      setIsUploading(true);
+      try {
+        const url = await uploadImageFile(nonImageFiles[0]);
+        if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  // Xử lý nút chọn nhiều ảnh để chèn vào nội dung trong Modal
+  const handleModalContentImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      const urls = await uploadMultipleImages(files);
+      if (urls.length > 0) {
+        const markdown = urls.map(u => `![Hình ảnh](${u})`).join('\n');
+        setEditingNote(prev => {
+          if (!prev) return null;
+          const currentContent = prev.content || "";
+          const { newText } = insertTextAtCursor(modalTextareaRef.current, currentContent, markdown);
+          return { ...prev, content: newText };
+        });
+      }
+      e.target.value = '';
     }
   };
 
@@ -686,95 +896,85 @@ export function NotesClient({
     if (!editingNote.id) {
       // Tạo mới ghi chú từ Modal
       const noteType = editingNote.image_url ? 'image' : 'text';
-      const { data: createdNote, error } = await supabase
-        .from('notes')
-        .insert({
-          user_id: userId,
-          group_id: editingNote.group_id || null,
-          title: editingNote.title?.trim() || null,
-          content: editingNote.content?.trim() || null,
-          type: noteType,
-          image_url: editingNote.image_url || null,
-          color: editingNote.color || 'default',
-          is_pinned: editingNote.is_pinned || false,
-          order: 0
-        })
-        .select()
-        .single();
+      try {
+        const resolvedTags = await getOrCreateTags(editTags);
+        const tagIds = resolvedTags.map(tag => tag.id);
+        const { data: createdNote, error } = await supabase
+          .rpc('create_note_with_tags', {
+            p_group_id: editingNote.group_id || null,
+            p_title: editingNote.title?.trim() || null,
+            p_content: editingNote.content?.trim() || null,
+            p_type: noteType,
+            p_image_url: editingNote.image_url || null,
+            p_source_app: editingNote.source_app || null,
+            p_color: editingNote.color || 'default',
+            p_is_pinned: editingNote.is_pinned || false,
+            p_order: editingNote.order || 0,
+            p_tag_ids: tagIds
+          })
+          .single();
 
-      if (error) {
+        if (error || !createdNote) {
+          throw error || new Error('Không thể tạo ghi chú');
+        }
+
+        const note = createdNote as Note;
+        const newLinks = tagIds.map(tagId => ({ note_id: note.id, tag_id: tagId }));
+        setNoteTags(prev => [...prev, ...newLinks]);
+        setNotes(prev => [note, ...prev]);
+        setIsNoteModalOpen(false);
+        setEditingNote(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Không thể tạo ghi chú";
         setAlertConfig({
           isOpen: true,
           title: "Lỗi tạo ghi chú",
-          message: error.message,
+          message,
           type: "error"
         });
-        return;
-      }
-
-      if (createdNote) {
-        let newLinks: NoteTag[] = [];
-        if (editTags.length > 0) {
-          const resolvedTags = await getOrCreateTags(editTags);
-          newLinks = resolvedTags.map(t => ({ note_id: createdNote.id, tag_id: t.id }));
-          if (newLinks.length > 0) {
-            await supabase.from('note_tags').insert(newLinks);
-            setNoteTags(prev => [...prev, ...newLinks]);
-          }
-        }
-        setNotes(prev => [createdNote, ...prev]);
-        setIsNoteModalOpen(false);
-        setEditingNote(null);
       }
       return;
     }
 
-    // Cập nhật ghi chú hiện có
-    const { data: updatedNote, error } = await supabase
-      .from('notes')
-      .update({
-        title: editingNote.title?.trim() || null,
-        content: editingNote.content?.trim() || null,
-        group_id: editingNote.group_id || null,
-        color: editingNote.color || 'default',
-        is_pinned: editingNote.is_pinned || false,
-        image_url: editingNote.image_url || null,
-        type: editingNote.image_url ? 'image' : 'text',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', editingNote.id)
-      .select()
-      .single();
+    // Cập nhật note và thay toàn bộ tag links trong cùng một transaction DB.
+    try {
+      const resolvedTags = await getOrCreateTags(editTags);
+      const tagIds = resolvedTags.map(tag => tag.id);
+      const { data: updatedNote, error } = await supabase
+        .rpc('update_note_with_tags', {
+          p_note_id: editingNote.id,
+          p_group_id: editingNote.group_id || null,
+          p_title: editingNote.title?.trim() || null,
+          p_content: editingNote.content?.trim() || null,
+          p_type: editingNote.image_url ? 'image' : 'text',
+          p_image_url: editingNote.image_url || null,
+          p_color: editingNote.color || 'default',
+          p_is_pinned: editingNote.is_pinned || false,
+          p_tag_ids: tagIds
+        })
+        .single();
 
-    if (error) {
+      if (error || !updatedNote) {
+        throw error || new Error('Không thể cập nhật ghi chú');
+      }
+
+      const note = updatedNote as Note;
+      const newLinks = tagIds.map(tagId => ({ note_id: editingNote.id, tag_id: tagId }));
+      setNoteTags(prev => [
+        ...prev.filter(noteTag => noteTag.note_id !== editingNote.id),
+        ...newLinks
+      ]);
+      setNotes(prev => prev.map(existingNote => existingNote.id === editingNote.id ? note : existingNote));
+      setIsNoteModalOpen(false);
+      setEditingNote(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể cập nhật ghi chú";
       setAlertConfig({
         isOpen: true,
         title: "Lỗi cập nhật",
-        message: error.message,
+        message,
         type: "error"
       });
-      return;
-    }
-
-    if (updatedNote) {
-      // Cập nhật Tags
-      await supabase.from('note_tags').delete().eq('note_id', editingNote.id);
-      let newLinks: NoteTag[] = [];
-      if (editTags.length > 0) {
-        const resolvedTags = await getOrCreateTags(editTags);
-        newLinks = resolvedTags.map(t => ({ note_id: editingNote.id, tag_id: t.id }));
-        if (newLinks.length > 0) {
-          await supabase.from('note_tags').insert(newLinks);
-        }
-      }
-
-      setNoteTags(prev => [
-        ...prev.filter(nt => nt.note_id !== editingNote.id),
-        ...newLinks
-      ]);
-      setNotes(prev => prev.map(n => n.id === editingNote.id ? updatedNote : n));
-      setIsNoteModalOpen(false);
-      setEditingNote(null);
     }
   };
 
@@ -945,7 +1145,7 @@ export function NotesClient({
   const filteredNotes = notes.filter(note => {
     // Lọc theo sidebar filter
     if (selectedFilter === 'pinned' && !note.is_pinned) return false;
-    if (selectedFilter === 'images' && !note.image_url) return false;
+    if (selectedFilter === 'images' && !hasImagesOrAttachments(note)) return false;
     if (selectedFilter.startsWith('group:')) {
       const targetGroupId = selectedFilter.replace('group:', '');
       if (note.group_id !== targetGroupId) return false;
@@ -959,7 +1159,7 @@ export function NotesClient({
     // Lọc theo thanh tìm kiếm (Tiêu đề, nội dung, tên tag, tên nhóm, tên file đính kèm)
     if (isSearching) {
       const titleMatch = normalizeText(note.title || '').includes(normalizedQuery);
-      const contentMatch = normalizeText(note.content || '').includes(normalizedQuery);
+      const contentMatch = normalizeText(stripMarkdownImages(note.content) || '').includes(normalizedQuery);
       
       const currentTagIds = noteTags.filter(nt => nt.note_id === note.id).map(nt => nt.tag_id);
       const tagMatch = tags
@@ -1308,6 +1508,7 @@ export function NotesClient({
 
               {/* Ô nhập nội dung chính */}
               <textarea
+                ref={composerTextareaRef}
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
                 onFocus={() => setIsComposerExpanded(true)}
@@ -1317,10 +1518,43 @@ export function NotesClient({
                     handleCreateNote();
                   }
                 }}
-                placeholder={isComposerExpanded ? "Nội dung ghi chú... (Hỗ trợ paste ảnh / tài liệu)" : "Tạo ghi chú nhanh... (Hỗ trợ paste ảnh / tài liệu)"}
+                placeholder={isComposerExpanded ? "Nội dung ghi chú... (Hỗ trợ paste nhiều ảnh / kéo thả tệp)" : "Tạo ghi chú nhanh... (Hỗ trợ paste nhiều ảnh / kéo thả tệp)"}
                 rows={isComposerExpanded ? 3 : 1}
                 className="w-full bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none resize-none"
               />
+
+              {/* Danh sách ảnh đã chèn trong nội dung (Composer preview) */}
+              {isComposerExpanded && extractMarkdownImages(newContent).length > 0 && (
+                <div className="my-2 p-2 bg-zinc-900/80 border border-zinc-800 rounded-xl">
+                  <div className="text-[11px] font-semibold text-zinc-400 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <ImageIcon size={12} className="text-emerald-400" />
+                      Ảnh trong nội dung ({extractMarkdownImages(newContent).length})
+                    </span>
+                    <span className="text-[10px] text-zinc-500">Bấm X để gỡ</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {extractMarkdownImages(newContent).map((img, idx) => (
+                      <div key={idx} className="relative group/thumb w-14 h-14 rounded-lg overflow-hidden border border-zinc-700 bg-black/40 shrink-0">
+                        <img 
+                          src={img.url} 
+                          alt={img.alt} 
+                          className="w-full h-full object-cover cursor-zoom-in"
+                          onClick={() => setLightboxImage(img.url)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewContent(prev => removeMarkdownImage(prev, img.url))}
+                          className="absolute top-0.5 right-0.5 p-1 bg-black/80 hover:bg-red-600 text-white rounded-full transition-colors"
+                          title="Gỡ ảnh khỏi nội dung"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Tags đang chọn */}
               {isComposerExpanded && newSelectedTags.length > 0 && (
@@ -1343,7 +1577,27 @@ export function NotesClient({
                   {/* Công cụ bên trái: Chọn nhóm, thêm tag, thêm ảnh, chọn màu */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     
-                    {/* Nút Upload Ảnh & Tệp */}
+                    {/* Nút Upload nhiều Ảnh vào nội dung */}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      ref={composerContentImageInputRef}
+                      className="hidden"
+                      onChange={handleComposerContentImagesUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => composerContentImageInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium"
+                      title="Chèn nhiều hình ảnh vào nội dung ghi chú (hoặc Ctrl+V)"
+                    >
+                      <ImageIcon size={16} />
+                      <span className="text-xs">Chèn ảnh</span>
+                    </button>
+
+                    {/* Nút Upload Tệp đính kèm */}
                     <input
                       type="file"
                       accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
@@ -1351,12 +1605,18 @@ export function NotesClient({
                       className="hidden"
                       onChange={async (e) => {
                         if (e.target.files && e.target.files[0]) {
-                          const url = await uploadImageFile(e.target.files[0]);
-                          if (url) setNewImageUrl(url);
+                          setIsUploading(true);
+                          try {
+                            const url = await uploadImageFile(e.target.files[0]);
+                            if (url) setNewImageUrl(url);
+                          } finally {
+                            setIsUploading(false);
+                          }
                         }
                       }}
                     />
                     <button
+                      type="button"
                       onClick={() => imageInputRef.current?.click()}
                       disabled={isUploading}
                       className="p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
@@ -1653,6 +1913,16 @@ export function NotesClient({
         <div className="fixed inset-0 z-[80] bg-[#0e1113] flex flex-col animate-in fade-in zoom-in-95 duration-150">
           <form onSubmit={handleSaveEditNote} className="flex-1 flex flex-col h-full overflow-hidden">
             
+            {/* Hidden file input for modal multiple content images */}
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              ref={modalContentImageInputRef}
+              onChange={handleModalContentImagesUpload}
+            />
+
             {/* Hidden file input for modal attachment */}
             <input
               type="file"
@@ -1661,8 +1931,13 @@ export function NotesClient({
               ref={modalImageInputRef}
               onChange={async (e) => {
                 if (e.target.files && e.target.files[0]) {
-                  const url = await uploadImageFile(e.target.files[0]);
-                  if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+                  setIsUploading(true);
+                  try {
+                    const url = await uploadImageFile(e.target.files[0]);
+                    if (url) setEditingNote(prev => prev ? { ...prev, image_url: url } : null);
+                  } finally {
+                    setIsUploading(false);
+                  }
                 }
               }}
             />
@@ -1697,6 +1972,17 @@ export function NotesClient({
                   title={editingNote.is_pinned ? "Bỏ ghim" : "Ghim ghi chú"}
                 >
                   <Pin size={16} className={editingNote.is_pinned ? "fill-amber-400" : ""} />
+                </button>
+
+                {/* Nút Chèn ảnh vào nội dung */}
+                <button
+                  type="button"
+                  onClick={() => modalContentImageInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="p-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-xl transition-colors"
+                  title="Chèn nhiều ảnh vào nội dung ghi chú (hoặc Ctrl+V dán ảnh)"
+                >
+                  <ImageIcon size={16} />
                 </button>
 
                 {/* Nút Đính kèm nhanh */}
@@ -1763,6 +2049,8 @@ export function NotesClient({
               {/* MAIN CONTENT AREA - Không gian lớn, thoáng đãng để đọc và viết */}
               <main 
                 onPaste={handlePasteInModal}
+                onDrop={handleDropInModal}
+                onDragOver={(e) => e.preventDefault()}
                 className="flex-1 overflow-y-auto p-4 sm:p-8 md:p-12 max-w-4xl mx-auto w-full flex flex-col space-y-4"
               >
                 {/* Metadata Chips Bar (Hiển thị tóm tắt & bấm để mở chỉnh sửa) */}
@@ -1821,12 +2109,62 @@ export function NotesClient({
                   </div>
                 )}
 
+                {/* Danh sách ảnh đã chèn trong nội dung (Modal preview & management) */}
+                {editingNote.content && extractMarkdownImages(editingNote.content).length > 0 && (
+                  <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
+                      <span className="flex items-center gap-1.5">
+                        <ImageIcon size={14} className="text-emerald-400" />
+                        Ảnh trong nội dung ({extractMarkdownImages(editingNote.content).length})
+                      </span>
+                      <span className="text-[11px] text-zinc-500 font-normal">Click ảnh để xem lớn, bấm 🗑️ để gỡ khỏi nội dung</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
+                      {extractMarkdownImages(editingNote.content).map((img, idx) => (
+                        <div 
+                          key={idx} 
+                          className="relative group/modalImg rounded-xl overflow-hidden border border-zinc-700/80 bg-black/40 aspect-video flex items-center justify-center shadow-sm"
+                        >
+                          <img 
+                            src={img.url} 
+                            alt={img.alt} 
+                            className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/modalImg:scale-105"
+                            onClick={() => setLightboxImage(img.url)}
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/modalImg:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setLightboxImage(img.url); }}
+                              className="p-1.5 bg-black/80 hover:bg-zinc-700 text-white rounded-lg shadow transition-colors"
+                              title="Phóng to"
+                            >
+                              <Maximize2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingNote(prev => prev ? { ...prev, content: removeMarkdownImage(prev.content || '', img.url) } : null);
+                              }}
+                              className="p-1.5 bg-black/80 hover:bg-red-600 text-white rounded-lg shadow transition-colors"
+                              title="Gỡ ảnh khỏi bài"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Nội dung ghi chú (Spacious, full height textarea) */}
                 <div className="flex-1 flex flex-col min-h-[350px]">
                   <textarea
+                    ref={modalTextareaRef}
                     value={editingNote.content || ""}
                     onChange={(e) => setEditingNote(prev => prev ? { ...prev, content: e.target.value } : null)}
-                    placeholder="Bắt đầu viết nội dung ghi chú ở đây... (Hỗ trợ Ctrl+V dán hình ảnh hoặc kéo thả tệp)"
+                    placeholder="Bắt đầu viết nội dung ghi chú ở đây... (Hỗ trợ Ctrl+V dán nhiều hình ảnh hoặc kéo thả tệp)"
                     className="w-full flex-1 bg-transparent text-zinc-200 placeholder:text-zinc-600 text-sm sm:text-base leading-relaxed md:leading-loose resize-none outline-none font-sans p-0 min-h-[350px]"
                   />
                 </div>
@@ -2170,6 +2508,8 @@ function NoteCardItem({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorCfg = getColorConfig(note.color);
   const group = groups.find(g => g.id === note.group_id);
+  const contentImages = extractMarkdownImages(note.content);
+  const cleanContent = stripMarkdownImages(note.content);
 
   return (
     <div
@@ -2178,7 +2518,7 @@ function NoteCardItem({
         viewMode === 'list' ? 'p-3 md:p-4 gap-2' : 'p-4 justify-between'
       }`}
     >
-      {/* TỆP / ẢNH TRONG GRID VIEW */}
+      {/* TỆP / ẢNH ĐÍNH KÈM TRONG GRID VIEW */}
       {note.image_url && viewMode === 'grid' && (
         <div className="mb-3 shrink-0" onClick={(e) => e.stopPropagation()}>
           <AttachmentDisplay 
@@ -2186,6 +2526,62 @@ function NoteCardItem({
             onViewImage={onViewImage} 
             compact={true} 
           />
+        </div>
+      )}
+
+      {/* ẢNH TRONG NỘI DUNG Ở GRID VIEW (LƯỚI NHIỀU ẢNH) */}
+      {contentImages.length > 0 && viewMode === 'grid' && (
+        <div className="mb-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {contentImages.length === 1 ? (
+            <div 
+              onClick={() => onViewImage(contentImages[0].url)}
+              className="rounded-xl overflow-hidden bg-black/40 border border-zinc-700/60 group/cardImg max-h-48 relative cursor-zoom-in flex items-center justify-center"
+            >
+              <img 
+                src={contentImages[0].url} 
+                alt="Content image" 
+                className="w-full max-h-48 object-cover transition-transform group-hover/cardImg:scale-105" 
+              />
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cardImg:opacity-100 flex items-center justify-center transition-opacity">
+                <Maximize2 size={16} className="text-white drop-shadow" />
+              </div>
+            </div>
+          ) : contentImages.length === 2 ? (
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl overflow-hidden">
+              {contentImages.map((img, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => onViewImage(img.url)}
+                  className="h-28 bg-black/40 border border-zinc-700/60 rounded-lg overflow-hidden group/cardImg relative cursor-zoom-in"
+                >
+                  <img src={img.url} alt="Content image" className="w-full h-full object-cover transition-transform group-hover/cardImg:scale-105" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl overflow-hidden">
+              {contentImages.slice(0, 3).map((img, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => onViewImage(img.url)}
+                  className="h-24 bg-black/40 border border-zinc-700/60 rounded-lg overflow-hidden group/cardImg relative cursor-zoom-in"
+                >
+                  <img src={img.url} alt="Content image" className="w-full h-full object-cover transition-transform group-hover/cardImg:scale-105" />
+                </div>
+              ))}
+              <div 
+                onClick={() => onViewImage(contentImages[3].url)}
+                className="h-24 bg-black/40 border border-zinc-700/60 rounded-lg overflow-hidden group/cardImg relative cursor-zoom-in flex items-center justify-center"
+              >
+                <img src={contentImages[3].url} alt="Content image" className="w-full h-full object-cover transition-transform group-hover/cardImg:scale-105" />
+                {contentImages.length > 4 && (
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-white font-bold text-sm">
+                    +{contentImages.length - 3}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2225,9 +2621,9 @@ function NoteCardItem({
             )}
           </div>
 
-          {note.content && (
+          {cleanContent && (
             <p className={`text-zinc-300 whitespace-pre-wrap break-words leading-relaxed ${viewMode === 'list' ? 'text-sm line-clamp-1' : 'text-sm md:text-xs line-clamp-6'}`}>
-              {note.content}
+              {cleanContent}
             </p>
           )}
 
@@ -2260,6 +2656,24 @@ function NoteCardItem({
                 <span className="max-w-[100px] md:max-w-[140px] truncate text-[11px] font-medium">{getFileNameFromUrl(note.image_url)}</span>
               </a>
             )}
+          </div>
+        )}
+
+        {/* ẢNH TRONG NỘI DUNG Ở LIST VIEW (KHI KHÔNG CÓ TỆP ĐÍNH KÈM) */}
+        {!note.image_url && contentImages.length > 0 && viewMode === 'list' && (
+          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div 
+              onClick={(e) => { e.stopPropagation(); onViewImage(contentImages[0].url); }}
+              className="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
+              title={`${contentImages.length} ảnh trong ghi chú`}
+            >
+              <img src={contentImages[0].url} alt="Content image" className="w-full h-full object-cover transition-transform group-hover/img:scale-105" />
+              {contentImages.length > 1 && (
+                <span className="absolute bottom-0.5 right-0.5 px-1 py-0.2 bg-black/80 text-[10px] text-white font-bold rounded">
+                  +{contentImages.length - 1}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -2314,4 +2728,3 @@ function NoteCardItem({
     </div>
   );
 }
-

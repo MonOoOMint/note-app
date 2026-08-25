@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     // Thành công: chuyển hướng về trang Ghi chú
     return NextResponse.redirect(`${baseUrl}/notes?shared=success`, 303);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Share target POST handler error:", error);
     const baseUrl = new URL(req.url).origin;
     return NextResponse.redirect(`${baseUrl}/notes`, 303);

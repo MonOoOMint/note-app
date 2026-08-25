@@ -4,6 +4,26 @@ import webpush from 'web-push';
 
 export const dynamic = 'force-dynamic';
 
+interface PushSubscriptionRecord {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (typeof error === 'object' && error !== null && 'statusCode' in error) {
+    const statusCode = (error as { statusCode?: unknown }).statusCode;
+    return typeof statusCode === 'number' ? statusCode : undefined;
+  }
+  return undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown cron error';
+}
+
 // Configure Web Push
 webpush.setVapidDetails(
   'mailto:your-email@example.com', // Cần điền email liên hệ thực tế sau này
@@ -114,7 +134,8 @@ export async function GET(request: Request) {
 
       if (subs && subs.length > 0 && !subsError) {
         // Gom nhóm subscription theo user_id
-        const subsByUser = subs.reduce((acc: any, sub: any) => {
+        const subscriptionRows = subs as PushSubscriptionRecord[];
+        const subsByUser = subscriptionRows.reduce<Record<string, PushSubscriptionRecord[]>>((acc, sub) => {
           if (!acc[sub.user_id]) acc[sub.user_id] = [];
           acc[sub.user_id].push(sub);
           return acc;
@@ -153,8 +174,8 @@ export async function GET(request: Request) {
               try {
                 await webpush.sendNotification(pushSubscription, payload);
                 pushCount++;
-              } catch (error: any) {
-                if (error.statusCode === 410) {
+              } catch (error: unknown) {
+                if (getErrorStatusCode(error) === 410) {
                   // Token hết hạn hoặc user hủy quyền -> Xóa khỏi DB
                   await supabase.from('push_subscriptions').delete().eq('id', sub.id);
                 } else {
@@ -175,8 +196,8 @@ export async function GET(request: Request) {
       notificationSent: shouldSendNotification,
       greeting: greetingTitle
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Cron Error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

@@ -9,10 +9,7 @@ import {
   CheckCircle2, 
   Circle, 
   RotateCcw, 
-  CheckCheck, 
   Trash,
-  CheckSquare,
-  Sparkles,
   Plus
 } from "lucide-react";
 import { TodoGroupSidebar, Group } from "@/components/todos/TodoGroupSidebar";
@@ -33,7 +30,6 @@ import {
   TouchSensor
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -44,7 +40,7 @@ import { AlertModal } from "@/components/ui/AlertModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createClient } from "@/lib/supabase/client";
-import { useRef, useEffect } from "react";
+import { useEffect } from "react";
 
 // Polyfill removed due to touch device freezing issues
 
@@ -77,32 +73,6 @@ export default function TodosClient({
   
   const [activeGroupId, setActiveGroupId] = useState<string | undefined>();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // Drag & Drop State cho Todos
-  const dragTodoRef = useRef<string | null>(null);
-  const [draggedTodo, setDraggedTodo] = useState<string | null>(null);
-  const [dragOverTodo, setDragOverTodo] = useState<string | null>(null);
-
-  // Global fallback để chống kẹt trạng thái kéo thả (đặc biệt trên giả lập mobile)
-  useEffect(() => {
-    const handleGlobalDragEnd = () => {
-      if (dragTodoRef.current) {
-        dragTodoRef.current = null;
-        setDraggedTodo(null);
-        setDragOverTodo(null);
-      }
-    };
-    
-    window.addEventListener('mouseup', handleGlobalDragEnd);
-    window.addEventListener('touchend', handleGlobalDragEnd);
-    window.addEventListener('dragend', handleGlobalDragEnd);
-    
-    return () => {
-      window.removeEventListener('mouseup', handleGlobalDragEnd);
-      window.removeEventListener('touchend', handleGlobalDragEnd);
-      window.removeEventListener('dragend', handleGlobalDragEnd);
-    };
-  }, []);
   
   // Modal state
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -316,11 +286,6 @@ export default function TodosClient({
   }, {} as Record<string, number>);
 
   // --- GROUP ACTIONS ---
-  const handleSelectGroup = (id?: string) => {
-    setActiveGroupId(id);
-    setIsMobileMenuOpen(false);
-  };
-
   const handleModeChange = (newMode: "todo" | "checklist") => {
     setMode(newMode);
     setActiveGroupId(undefined); // Reset active group when switching modes

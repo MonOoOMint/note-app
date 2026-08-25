@@ -22,10 +22,10 @@ export default async function NotesPage({
     supabase.from('note_tags').select('*')
   ]);
 
-  let loadedGroups = groupsRes.data || [];
-  let loadedNotes = notesRes.data || [];
-  let loadedTags = tagsRes.data || [];
-  let loadedNoteTags = noteTagsRes.data || [];
+  const loadedGroups = groupsRes.data || [];
+  const loadedNotes = notesRes.data || [];
+  const loadedTags = tagsRes.data || [];
+  const loadedNoteTags = noteTagsRes.data || [];
 
   return (
     <NotesClient

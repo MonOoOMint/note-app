@@ -1,5 +1,16 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Database setup
+
+The application requires the versioned Supabase migrations in [`supabase/migrations`](./supabase/migrations). Apply them before deploying a version of the application that uses new database functions or columns:
+
+```bash
+supabase link --project-ref <project-ref>
+supabase db push
+```
+
+The complete database baseline and the transactional RPCs used by note editing and bookmark import are defined in `supabase/migrations/20260819000100_functional_database_baseline.sql`. The SQL files in the repository root are retained only as legacy references and must not be used to provision a new database.
+
 ## Getting Started
 
 First, run the development server:

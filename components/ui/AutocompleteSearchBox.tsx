@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Folder, Search, X, Check, Plus, ChevronDown } from "lucide-react";
+import { Folder, X, Check, Plus, ChevronDown } from "lucide-react";
 
 export interface AutocompleteItem {
   id: string;

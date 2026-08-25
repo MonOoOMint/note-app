@@ -34,6 +34,27 @@ interface Bookmark {
   order: number;
 }
 
+interface BookmarkImportFolder {
+  temp_id: string;
+  name: string;
+  color: string;
+  order: number;
+}
+
+interface BookmarkImportItem {
+  folder_temp_id: string;
+  title: string;
+  url: string;
+  favicon_url: string;
+  description: string;
+  order: number;
+}
+
+interface BookmarkImportResult {
+  folders: Folder[];
+  bookmarks: Bookmark[];
+}
+
 function normalizeText(str: string): string {
   if (!str) return '';
   return str
@@ -404,7 +425,7 @@ export function BookmarksClient({
     try {
       const hostname = new URL(url).hostname;
       return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
-    } catch (e) {
+    } catch {
       return '';
     }
   };
@@ -559,7 +580,7 @@ export function BookmarksClient({
     setDragOverBoardId(null);
   };
 
-  const handleDragOverCard = (e: React.DragEvent, colIndex: number, rowIndex: number, folderId: string) => {
+  const handleDragOverCard = (e: React.DragEvent, colIndex: number, rowIndex: number) => {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -590,7 +611,7 @@ export function BookmarksClient({
     }
   };
 
-  const handleDragOverBookmark = (e: React.DragEvent, targetBookmarkId: string, folderId: string) => {
+  const handleDragOverBookmark = (e: React.DragEvent, targetBookmarkId: string) => {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -599,10 +620,6 @@ export function BookmarksClient({
     if (currentDrag?.type === 'bookmark' && currentDrag.id !== targetBookmarkId) {
       setDragOverBookmarkId(targetBookmarkId);
     }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
   };
 
   const handleDropFolderAt = async (e: React.DragEvent, targetCol: number, targetRow: number) => {
@@ -620,7 +637,7 @@ export function BookmarksClient({
           draggedId = parsed.id;
           dragType = parsed.type;
         }
-      } catch (err) {}
+      } catch {}
     }
 
     // Reset drag indicators
@@ -702,7 +719,7 @@ export function BookmarksClient({
           draggedId = parsed.id;
           dragType = parsed.type;
         }
-      } catch (err) {}
+      } catch {}
     }
 
     // Reset
@@ -759,7 +776,7 @@ export function BookmarksClient({
           const parsed = JSON.parse(json);
           if (parsed.type === 'folder') folderIdToMove = parsed.id;
         }
-      } catch (err) {}
+      } catch {}
     }
 
     dragItemRef.current = null;
@@ -826,13 +843,18 @@ export function BookmarksClient({
 
     setIsImporting(true);
     try {
+      if (!activeBoardId) {
+        throw new Error('Vui lòng tạo hoặc chọn một bảng trước khi nhập bookmark.');
+      }
+
       const text = await file.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, 'text/html');
 
-      let newFoldersData: any[] = [];
-      let newBookmarksData: any[] = [];
-      let currentFolderIndex = folders.length;
+      const newFoldersData: BookmarkImportFolder[] = [];
+      const newBookmarksData: BookmarkImportItem[] = [];
+      const currentFolderIndex = folders.filter(folder => folder.board_id === activeBoardId).length;
+      const bookmarkCounters = new Map<string, number>();
 
       const h3s = doc.querySelectorAll('h3');
 
@@ -841,12 +863,10 @@ export function BookmarksClient({
         const folderKey = `temp_${i}`;
         
         newFoldersData.push({
-          user_id: userId,
-          board_id: activeBoardId,
+          temp_id: folderKey,
           name: folderName,
           color: 'blue',
-          order: currentFolderIndex + i,
-          _tempId: folderKey
+          order: currentFolderIndex + i
         });
 
         let nextEl = h3.nextElementSibling;
@@ -861,13 +881,14 @@ export function BookmarksClient({
             const favicon = getEffectiveFavicon(a.href, rawIcon);
 
             newBookmarksData.push({
-              user_id: userId,
+              folder_temp_id: folderKey,
               title: a.textContent?.trim() || a.href,
               url: a.href,
               favicon_url: favicon,
               description: '',
-              _tempFolderKey: folderKey
+              order: bookmarkCounters.get(folderKey) || 0
             });
+            bookmarkCounters.set(folderKey, (bookmarkCounters.get(folderKey) || 0) + 1);
           });
         }
       });
@@ -877,83 +898,61 @@ export function BookmarksClient({
         if (links.length > 0) {
           const folderKey = `temp_default`;
           newFoldersData.push({
-            user_id: userId,
-            board_id: activeBoardId,
+            temp_id: folderKey,
             name: "Imported Bookmarks",
             color: 'blue',
-            order: currentFolderIndex,
-            _tempId: folderKey
+            order: currentFolderIndex
           });
           links.forEach(a => {
             const rawIcon = a.getAttribute('icon') || a.getAttribute('ICON') || a.getAttribute('icon_uri') || a.getAttribute('ICON_URI') || '';
             const favicon = getEffectiveFavicon(a.href, rawIcon);
 
             newBookmarksData.push({
-              user_id: userId,
+              folder_temp_id: folderKey,
               title: a.textContent?.trim() || a.href,
               url: a.href,
               favicon_url: favicon,
               description: '',
-              _tempFolderKey: folderKey
+              order: bookmarkCounters.get(folderKey) || 0
             });
+            bookmarkCounters.set(folderKey, (bookmarkCounters.get(folderKey) || 0) + 1);
           });
         }
       }
 
-      const foldersToInsert = newFoldersData.map(f => {
-         const { _tempId, ...rest } = f;
-         return rest;
-      });
-      
-      let allInsertedFolders = [];
-      if (foldersToInsert.length > 0) {
-        const { data: insertedFolders, error: folderErr } = await supabase.from('bookmark_folders').insert(foldersToInsert).select();
-        if (folderErr) throw folderErr;
-        allInsertedFolders = insertedFolders || [];
+      if (newFoldersData.length === 0) {
+        throw new Error('Không tìm thấy bookmark hợp lệ trong tệp đã chọn.');
       }
 
-      const tempToRealId: Record<string, string> = {};
-      allInsertedFolders.forEach((f: any, idx: number) => {
-         tempToRealId[newFoldersData[idx]._tempId] = f.id;
+      const { data, error } = await supabase.rpc('import_bookmarks_transactional', {
+        p_board_id: activeBoardId,
+        p_folders: newFoldersData,
+        p_bookmarks: newBookmarksData
       });
-
-      const folderCounters: Record<string, number> = {};
-      let bmsToInsert = newBookmarksData.map(b => {
-         const { _tempFolderKey, ...rest } = b;
-         const realFolderId = tempToRealId[_tempFolderKey];
-         if (folderCounters[realFolderId] === undefined) folderCounters[realFolderId] = bookmarks.filter(bm => bm.folder_id === realFolderId).length;
-         
-         return {
-           ...rest,
-           folder_id: realFolderId,
-           order: folderCounters[realFolderId]++
-         };
-      });
-
-      const chunkSize = 200;
-      const allInsertedBms = [];
-      for (let i = 0; i < bmsToInsert.length; i += chunkSize) {
-        const chunk = bmsToInsert.slice(i, i + chunkSize);
-        const { data: insertedBms, error: bmErr } = await supabase.from('bookmarks').insert(chunk).select();
-        if (bmErr) throw bmErr;
-        if (insertedBms) allInsertedBms.push(...insertedBms);
+      if (error || !data) {
+        throw error || new Error('Không thể nhập bookmark.');
       }
 
-      setFolders([...folders, ...allInsertedFolders]);
-      setBookmarks([...bookmarks, ...allInsertedBms]);
+      const result = data as unknown as BookmarkImportResult;
+      const insertedFolders = Array.isArray(result.folders) ? result.folders : [];
+      const insertedBookmarks = Array.isArray(result.bookmarks) ? result.bookmarks : [];
+
+      setFolders(previousFolders => [...previousFolders, ...insertedFolders]);
+      setBookmarks(previousBookmarks => [...previousBookmarks, ...insertedBookmarks]);
       
       setAlertConfig({
         isOpen: true,
         title: "Nhập dữ liệu thành công",
-        message: `Đã nhập thành công ${allInsertedFolders.length} cột và ${allInsertedBms.length} liên kết!`,
+        message: `Đã nhập thành công ${insertedFolders.length} cột và ${insertedBookmarks.length} liên kết!`,
         type: "success"
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Import error", err);
+      const message = err instanceof Error ? err.message : "Định dạng file không hợp lệ";
       setAlertConfig({
         isOpen: true,
         title: "Lỗi khi nhập dữ liệu",
-        message: "Lỗi khi import: " + (err.message || "Định dạng file không hợp lệ"),
+        message: "Lỗi khi import: " + message,
         type: "error"
       });
     } finally {
@@ -965,7 +964,7 @@ export function BookmarksClient({
   // Trích xuất domain từ URL để hiển thị mờ mờ
   const getDomain = (url: string) => {
     try { return new URL(url).hostname.replace('www.', ''); } 
-    catch (e) { return url; }
+    catch { return url; }
   };
 
   const FOLDER_COLORS = [
@@ -1260,7 +1259,7 @@ export function BookmarksClient({
               </div>
               <h3 className="text-base font-semibold text-zinc-200 mb-1">Không tìm thấy bookmark phù hợp</h3>
               <p className="text-xs text-zinc-400 max-w-sm text-center mb-5">
-                Không tìm thấy bookmark nào khớp với từ khóa <span className="text-blue-400 font-medium font-mono">"{searchQuery}"</span> trong {searchScope === 'all' ? 'tất cả các bảng' : 'bảng hiện tại'}.
+                Không tìm thấy bookmark nào khớp với từ khóa <span className="text-blue-400 font-medium font-mono">&quot;{searchQuery}&quot;</span> trong {searchScope === 'all' ? 'tất cả các bảng' : 'bảng hiện tại'}.
               </p>
               <div className="flex items-center gap-2">
                 {searchScope === 'current' && (
@@ -1356,7 +1355,7 @@ export function BookmarksClient({
                             draggable={!isSearching}
                             onDragStart={(e) => !isSearching && handleDragStartFolder(e, folder.id)}
                             onDragEnd={handleDragEnd}
-                            onDragOver={(e) => !isSearching && handleDragOverCard(e, colIndex, rowIndex, folder.id)}
+                            onDragOver={(e) => !isSearching && handleDragOverCard(e, colIndex, rowIndex)}
                             onDrop={(e) => {
                               if (isSearching) return;
                               const currentDrag = dragItemRef.current;
@@ -1405,7 +1404,7 @@ export function BookmarksClient({
                                     draggable={!isSearching}
                                     onDragStart={(e) => !isSearching && handleDragStartBookmark(e, bm.id, folder.id)}
                                     onDragEnd={handleDragEnd}
-                                    onDragOver={(e) => !isSearching && handleDragOverBookmark(e, bm.id, folder.id)}
+                                    onDragOver={(e) => !isSearching && handleDragOverBookmark(e, bm.id)}
                                     onDrop={(e) => !isSearching && handleDropBookmark(e, folder.id, bm.id)}
                                     className={`group flex items-center py-1.5 px-2 rounded hover:bg-white/5 transition-colors relative cursor-pointer ${dragOverBookmarkId === bm.id ? 'border-t-2 border-blue-500' : 'border-t-2 border-transparent'} ${draggedBookmarkId === bm.id ? 'opacity-50' : ''}`}
                                   >

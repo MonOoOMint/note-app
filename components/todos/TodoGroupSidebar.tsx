@@ -1,5 +1,4 @@
 import { Plus, List, CheckSquare, CheckCheck } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { SortableGroupItem } from "./SortableGroupItem";
 import { BuildTimeBadge } from "@/components/ui/BuildTimeBadge";
 import {
@@ -13,7 +12,6 @@ import {
   TouchSensor
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,

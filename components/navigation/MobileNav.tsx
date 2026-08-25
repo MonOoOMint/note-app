@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CheckSquare, Bookmark, FileText, User } from "lucide-react";
+import { CheckSquare, FileText, User } from "lucide-react";
 
 export function MobileNav() {
   const pathname = usePathname();
