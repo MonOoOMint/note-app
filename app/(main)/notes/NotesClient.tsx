@@ -1411,7 +1411,7 @@ export function NotesClient({
           <span 
             key={t.id}
             onClick={(e) => { e.stopPropagation(); setSelectedFilter(`tag:${t.id}`); }}
-            className="text-xs md:text-[11px] font-medium px-2.5 md:px-2 py-1 md:py-0.5 rounded-md bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-blue-400 border border-zinc-700/50 transition-colors cursor-pointer"
+            className="text-xs font-medium px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-blue-400 border border-zinc-700/50 transition-colors cursor-pointer"
           >
             #{t.name}
           </span>
@@ -1566,29 +1566,31 @@ export function NotesClient({
       <div className="flex-1 w-full md:w-auto shrink-0 md:shrink flex flex-col min-w-0 bg-[#0e1113] relative overflow-hidden transition-all duration-300">
         
         {/* Header trên cùng */}
-        <header className="h-14 px-6 border-b border-zinc-800 flex items-center justify-between bg-[#181d20] relative z-30 shrink-0 gap-4">
-          <div className="flex items-center gap-3 shrink-0">
+        <header className="h-14 sm:h-16 px-3.5 sm:px-6 border-b border-zinc-800 flex items-center justify-between bg-[#181d20] relative z-30 shrink-0 gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-              className={`p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors ${isSidebarOpen ? 'bg-zinc-800 text-blue-400' : ''}`}
+              className={`p-2 sm:p-1.5 rounded-xl text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 transition-colors ${isSidebarOpen ? 'bg-zinc-800 text-blue-400' : ''}`}
               title={isSidebarOpen ? "Ẩn danh mục" : "Hiện danh mục"}
             >
-              <Menu size={18} />
+              <Menu size={20} />
             </button>
-            <h1 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+            <h1 className="text-sm sm:text-base md:text-lg font-bold text-zinc-100 flex items-center gap-1.5 truncate">
               {isSearching ? (
                 <>
-                  <Search size={16} className="text-blue-400" />
-                  <span className="truncate max-w-[200px] sm:max-w-md">Tìm: &quot;{searchQuery}&quot;</span>
+                  <Search size={16} className="text-blue-400 shrink-0" />
+                  <span className="truncate max-w-[150px] sm:max-w-md">Tìm: &quot;{searchQuery}&quot;</span>
                   <span className="text-xs bg-blue-500/20 text-blue-300 font-mono px-2 py-0.5 rounded-full shrink-0">{filteredNotes.length}</span>
                 </>
               ) : (
                 <>
-                  {selectedFilter === 'all' && 'Tất cả ghi chú'}
-                  {selectedFilter === 'pinned' && 'Ghi chú đã ghim ⭐'}
-                  {selectedFilter === 'images' && 'Ghi chú có tệp đính kèm 📎'}
-                  {selectedFilter.startsWith('group:') && (groups.find(g => g.id === selectedFilter.replace('group:', ''))?.name || 'Nhóm ghi chú')}
-                  {selectedFilter.startsWith('tag:') && `#${tags.find(t => t.id === selectedFilter.replace('tag:', ''))?.name || 'Tag'}`}
+                  <span className="truncate">
+                    {selectedFilter === 'all' && 'Tất cả ghi chú'}
+                    {selectedFilter === 'pinned' && 'Đã ghim ⭐'}
+                    {selectedFilter === 'images' && 'Có tệp đính kèm 📎'}
+                    {selectedFilter.startsWith('group:') && (groups.find(g => g.id === selectedFilter.replace('group:', ''))?.name || 'Nhóm')}
+                    {selectedFilter.startsWith('tag:') && `#${tags.find(t => t.id === selectedFilter.replace('tag:', ''))?.name || 'Tag'}`}
+                  </span>
                 </>
               )}
             </h1>
@@ -1596,48 +1598,59 @@ export function NotesClient({
 
           {/* Thanh tìm kiếm Note (Desktop) */}
           <div className="hidden md:flex flex-1 max-w-xl relative mx-2">
-            <div className="relative flex items-center">
-              <Search size={16} className="absolute left-3.5 text-zinc-400 pointer-events-none" />
+            <div className="relative flex items-center w-full">
+              <Search size={18} className="absolute left-3.5 text-zinc-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm kiếm theo tiêu đề, nội dung, #tag..."
-                className="w-full h-10 pl-10 pr-10 bg-[#20262b] hover:bg-[#283036] focus:bg-[#151a1e] text-zinc-100 placeholder:text-zinc-500 rounded-xl text-[13px] transition-all border border-zinc-700/80 focus:border-blue-500/80 focus:ring-4 focus:ring-blue-500/15 shadow-sm outline-none"
+                className="w-full h-10 pl-11 pr-10 bg-[#20262b] hover:bg-[#283036] focus:bg-[#151a1e] text-zinc-100 placeholder:text-zinc-500 rounded-xl text-sm transition-all border border-zinc-700/80 focus:border-blue-500/80 focus:ring-4 focus:ring-blue-500/15 shadow-sm outline-none"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 p-1 text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-zinc-700/50"
+                  className="absolute right-3 p-1.5 text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-zinc-700/50"
                   title="Xóa tìm kiếm"
                 >
-                  <X size={14} />
+                  <X size={16} />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Controls: Đổi chế độ xem Lưới / Danh sách */}
-          <div className="flex items-center gap-1.5 shrink-0 bg-[#20262b] p-1 rounded-xl border border-zinc-700/80">
+          {/* Controls: Tìm kiếm Mobile & Đổi chế độ xem Lưới / Danh sách */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Nút tìm kiếm mobile */}
             <button
-              onClick={() => changeViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
-              title="Chế độ Lưới (Grid)"
+              onClick={() => setIsMobileSearchOpen(true)}
+              className="md:hidden p-2 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+              title="Tìm kiếm"
             >
-              <LayoutGrid size={16} />
+              <Search size={18} />
             </button>
-            <button
-              onClick={() => changeViewMode('list')}
-              className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
-              title="Chế độ Danh sách (List)"
-            >
-              <List size={16} />
-            </button>
+
+            <div className="flex items-center gap-1 bg-[#20262b] p-1 rounded-xl border border-zinc-700/80">
+              <button
+                onClick={() => changeViewMode('grid')}
+                className={`p-1.5 sm:p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title="Chế độ Lưới (Grid)"
+              >
+                <LayoutGrid size={17} />
+              </button>
+              <button
+                onClick={() => changeViewMode('list')}
+                className={`p-1.5 sm:p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title="Chế độ Danh sách (List)"
+              >
+                <List size={17} />
+              </button>
+            </div>
           </div>
         </header>
 
         {/* Nội dung danh sách ghi chú & Ô nhập nhanh */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-28 md:pb-8 space-y-4 sm:space-y-6">
           
           {/* KHUNG SOẠN THẢO GHI CHÚ NHANH & NÚT SEARCH (MOBILE BOTTOM BAR / DESKTOP HEADER) */}
           <div className={`fixed bottom-14 left-0 right-0 p-3 bg-[#13171a]/95 backdrop-blur z-40 border-t border-zinc-800 flex items-center gap-2 md:static md:bg-transparent md:border-none md:p-0 md:max-w-2xl md:mx-auto md:block ${isComposerExpanded ? 'bottom-0 h-screen md:h-auto bg-[#13171a] p-4 flex-col justify-center' : ''}`}>
@@ -1699,18 +1712,18 @@ export function NotesClient({
                 }}
                 placeholder={isComposerExpanded ? "Nội dung ghi chú... (Hỗ trợ paste nhiều ảnh / kéo thả tệp)" : "Tạo ghi chú nhanh... (Hỗ trợ paste nhiều ảnh / kéo thả tệp)"}
                 rows={isComposerExpanded ? 3 : 1}
-                className="w-full bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none resize-none"
+                className="w-full bg-transparent text-base md:text-sm text-zinc-200 placeholder:text-zinc-500 outline-none resize-none"
               />
 
               {/* Danh sách ảnh đã chèn trong nội dung (Composer preview) */}
               {isComposerExpanded && extractMarkdownImages(newContent).length > 0 && (
-                <div className="my-2 p-2 bg-zinc-900/80 border border-zinc-800 rounded-xl">
-                  <div className="text-[11px] font-semibold text-zinc-400 mb-1.5 flex items-center justify-between">
+                <div className="my-2 p-2.5 bg-zinc-900/80 border border-zinc-800 rounded-xl">
+                  <div className="text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <ImageIcon size={12} className="text-emerald-400" />
+                      <ImageIcon size={14} className="text-emerald-400" />
                       Ảnh trong nội dung ({extractMarkdownImages(newContent).length})
                     </span>
-                    <span className="text-[10px] text-zinc-500">Bấm X để gỡ</span>
+                    <span className="text-xs text-zinc-400">Bấm X để gỡ</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {extractMarkdownImages(newContent).map((img, idx) => (
@@ -1727,7 +1740,7 @@ export function NotesClient({
                           className="absolute top-0.5 right-0.5 p-1 bg-black/80 hover:bg-red-600 text-white rounded-full transition-colors"
                           title="Gỡ ảnh khỏi nội dung"
                         >
-                          <X size={10} />
+                          <X size={12} />
                         </button>
                       </div>
                     ))}
@@ -1739,10 +1752,10 @@ export function NotesClient({
               {isComposerExpanded && newSelectedTags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 my-2">
                   {newSelectedTags.map(tagName => (
-                    <span key={tagName} className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                    <span key={tagName} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-blue-600/20 text-blue-300 border border-blue-500/30">
                       #{tagName}
-                      <button onClick={() => setNewSelectedTags(prev => prev.filter(t => t !== tagName))} className="hover:text-red-400">
-                        <X size={10} />
+                      <button onClick={() => setNewSelectedTags(prev => prev.filter(t => t !== tagName))} className="hover:text-red-400 p-0.5">
+                        <X size={12} />
                       </button>
                     </span>
                   ))}
@@ -1769,11 +1782,11 @@ export function NotesClient({
                       type="button"
                       onClick={() => composerContentImageInputRef.current?.click()}
                       disabled={isUploading}
-                      className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium"
+                      className="p-2 sm:p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-xl transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-semibold"
                       title="Chèn nhiều hình ảnh vào nội dung ghi chú (hoặc Ctrl+V)"
                     >
-                      <ImageIcon size={16} />
-                      <span className="text-xs">Chèn ảnh</span>
+                      <ImageIcon size={18} />
+                      <span>Chèn ảnh</span>
                     </button>
 
                     {/* Nút Upload Tệp đính kèm */}
@@ -1798,11 +1811,11 @@ export function NotesClient({
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
                       disabled={isUploading}
-                      className="p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
+                      className="p-2 sm:p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-xl transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-semibold"
                       title="Đính kèm tệp / ảnh (PDF, Word, Excel, TXT, Ảnh)"
                     >
-                      <Paperclip size={16} />
-                      <span className="text-xs">{isUploading ? "Đang tải..." : "Đính kèm"}</span>
+                      <Paperclip size={18} />
+                      <span>{isUploading ? "Đang tải..." : "Đính kèm"}</span>
                     </button>
 
                     {/* Chọn Nhóm (Autocomplete Search Box) */}
@@ -1815,13 +1828,13 @@ export function NotesClient({
                         badge: groupedNotesMap.get(g.id)?.length
                       }))}
                       placement="top"
-                      className="w-44"
+                      className="w-36 sm:w-44"
                       onCreate={handleCreateGroupOnTheFly}
                     />
 
                     {/* Thêm Tag nhanh */}
-                    <div className="flex items-center bg-zinc-800/80 border border-zinc-700 rounded-lg h-7 px-2">
-                      <TagIcon size={12} className="text-zinc-500 mr-1" />
+                    <div className="flex items-center bg-zinc-800/80 border border-zinc-700 rounded-xl h-8 sm:h-7 px-2.5">
+                      <TagIcon size={14} className="text-zinc-500 mr-1.5 shrink-0" />
                       <input
                         type="text"
                         value={newTagInput}
@@ -1837,17 +1850,17 @@ export function NotesClient({
                           }
                         }}
                         placeholder="Thêm tag..."
-                        className="bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 w-20 outline-none"
+                        className="bg-transparent text-xs text-zinc-200 placeholder:text-zinc-500 w-20 sm:w-24 outline-none"
                       />
                     </div>
 
                     {/* Bảng chọn màu */}
-                    <div className="flex items-center gap-1 ml-1">
+                    <div className="flex items-center gap-1.5 ml-1">
                       {NOTE_COLORS.slice(0, 5).map(c => (
                         <button
                           key={c.id}
                           onClick={() => setNewColor(c.id)}
-                          className={`w-4 h-4 rounded-full border transition-transform ${c.bg} ${newColor === c.id ? 'scale-125 border-blue-400' : 'border-zinc-600'}`}
+                          className={`w-6 h-6 sm:w-5 sm:h-5 rounded-full border transition-transform ${c.bg} ${newColor === c.id ? 'scale-110 border-blue-400 ring-2 ring-blue-500/40' : 'border-zinc-600'}`}
                           title={c.name}
                         />
                       ))}
@@ -1858,13 +1871,13 @@ export function NotesClient({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsComposerExpanded(false)}
-                      className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                      className="px-3 py-2 text-xs sm:text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                     >
                       Đóng
                     </button>
                     <button
                       onClick={handleCreateNote}
-                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md transition-colors flex items-center gap-1"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-colors flex items-center gap-1"
                     >
                       Lưu Note
                     </button>
@@ -1896,20 +1909,20 @@ export function NotesClient({
                 <div className="bg-[#13171a] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
                   <div 
                     onClick={() => toggleAccordion('pinned')}
-                    className="flex items-center justify-between p-3 md:p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                    className="flex items-center justify-between p-3.5 sm:p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
                   >
-                    <div className="flex items-center gap-3 text-amber-400">
-                      <button className="text-zinc-500 hover:text-zinc-300 transition-colors">
-                        {isAccordionOpen('pinned') ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <div className="flex items-center gap-2.5 sm:gap-3 text-amber-400">
+                      <button className="text-zinc-500 hover:text-zinc-300 transition-colors p-1">
+                        {isAccordionOpen('pinned') ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                       </button>
-                      <Pin size={16} />
-                      <span className="font-bold text-sm uppercase tracking-wider">Đã ghim</span>
-                      <span className="text-[10px] text-zinc-400 font-mono bg-zinc-800/50 px-2 py-0.5 rounded-full">{pinnedNotes.length}</span>
+                      <Pin size={18} />
+                      <span className="font-bold text-sm sm:text-base uppercase tracking-wider">Đã ghim</span>
+                      <span className="text-xs text-zinc-300 font-mono bg-zinc-800/80 px-2.5 py-0.5 rounded-full">{pinnedNotes.length}</span>
                     </div>
                   </div>
                   {isAccordionOpen('pinned') && (
-                    <div className="p-3 md:p-4 pt-0 border-t border-zinc-800/50">
-                      {renderNotesGrid(pinnedNotes, "mt-3 md:mt-4")}
+                    <div className="p-3.5 sm:p-4 pt-0 border-t border-zinc-800/50">
+                      {renderNotesGrid(pinnedNotes, "mt-3 sm:mt-4")}
                     </div>
                   )}
                 </div>
@@ -1928,52 +1941,52 @@ export function NotesClient({
                             style={style}
                             className={`bg-[#13171a] border rounded-2xl overflow-hidden shadow-sm transition-all border-zinc-800/80 mb-4 ${isDragging ? "ring-2 ring-blue-500 opacity-50" : ""}`}
                           >
-                            <div className="flex items-center justify-between p-3 md:p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors">
-                              <div className="flex items-center gap-3 text-blue-400 flex-1 min-w-0" onClick={() => toggleAccordion(group.id)}>
+                            <div className="flex items-center justify-between p-3.5 sm:p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors">
+                              <div className="flex items-center gap-2.5 sm:gap-3 text-blue-400 flex-1 min-w-0" onClick={() => toggleAccordion(group.id)}>
                                 <div 
                                   {...attributes} 
                                   {...listeners} 
-                                  className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-zinc-800 touch-none" 
+                                  className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 cursor-grab active:cursor-grabbing p-1.5 -ml-1 rounded-lg hover:bg-zinc-800 touch-none" 
                                   title="Kéo để sắp xếp"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <LayoutGrid size={14} className="pointer-events-none" />
+                                  <LayoutGrid size={16} className="pointer-events-none" />
                                 </div>
-                                <button className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0">
-                                  {isAccordionOpen(group.id) ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                <button className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 p-1">
+                                  {isAccordionOpen(group.id) ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                                 </button>
-                                <Folder size={16} className="shrink-0" />
-                                <span className="font-bold text-sm truncate">{group.name}</span>
-                                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-800/50 px-2 py-0.5 rounded-full shrink-0">{groupNotes.length}</span>
+                                <Folder size={18} className="shrink-0" />
+                                <span className="font-bold text-sm sm:text-base truncate">{group.name}</span>
+                                <span className="text-xs text-zinc-300 font-mono bg-zinc-800/80 px-2.5 py-0.5 rounded-full shrink-0">{groupNotes.length}</span>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 sm:gap-2">
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); setEditingGroup(group); setIsGroupModalOpen(true); }}
-                                  className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                  className="p-2 sm:p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors"
                                   title="Sửa nhóm"
                                 >
-                                  <Edit2 size={14} />
+                                  <Edit2 size={16} />
                                 </button>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group); }}
-                                  className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                  className="p-2 sm:p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
                                   title="Xoá nhóm"
                                 >
-                                  <Trash2 size={14} />
+                                  <Trash2 size={16} />
                                 </button>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleQuickAddNote(group.id); }}
-                                  className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-zinc-800 shrink-0 ml-2"
+                                  className="text-xs sm:text-sm text-zinc-300 hover:text-blue-400 flex items-center gap-1 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-zinc-800 shrink-0 ml-1"
                                   title="Thêm ghi chú vào nhóm này"
                                 >
-                                  <Plus size={14} /> <span className="hidden sm:inline">Thêm</span>
+                                  <Plus size={16} /> <span className="hidden sm:inline">Thêm</span>
                                 </button>
                               </div>
                             </div>
                             
                             {isAccordionOpen(group.id) && groupNotes.length > 0 && (
-                              <div className="p-3 md:p-4 pt-0 border-t border-zinc-800/50">
-                                {renderNotesGrid(groupNotes, "mt-3 md:mt-4")}
+                              <div className="p-3.5 sm:p-4 pt-0 border-t border-zinc-800/50">
+                                {renderNotesGrid(groupNotes, "mt-3 sm:mt-4")}
                               </div>
                             )}
                           </div>
@@ -1989,26 +2002,26 @@ export function NotesClient({
                 <div className="bg-[#13171a] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
                   <div 
                     onClick={() => toggleAccordion('ungrouped')}
-                    className="flex items-center justify-between p-3 md:p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                    className="flex items-center justify-between p-3.5 sm:p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
                   >
-                    <div className="flex items-center gap-3 text-zinc-400 flex-1 min-w-0">
-                      <button className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0">
-                        {isAccordionOpen('ungrouped') ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <div className="flex items-center gap-2.5 sm:gap-3 text-zinc-300 flex-1 min-w-0">
+                      <button className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 p-1">
+                        {isAccordionOpen('ungrouped') ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                       </button>
-                      <FileText size={16} className="shrink-0" />
-                      <span className="font-bold text-sm uppercase tracking-wider truncate">Không phân nhóm</span>
-                      <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800/50 px-2 py-0.5 rounded-full shrink-0">{ungroupedNotes.length}</span>
+                      <FileText size={18} className="shrink-0" />
+                      <span className="font-bold text-sm sm:text-base uppercase tracking-wider truncate">Không phân nhóm</span>
+                      <span className="text-xs text-zinc-400 font-mono bg-zinc-800/80 px-2.5 py-0.5 rounded-full shrink-0">{ungroupedNotes.length}</span>
                     </div>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleQuickAddNote(""); }}
-                      className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-zinc-800 shrink-0 ml-2"
+                      className="text-xs sm:text-sm text-zinc-300 hover:text-blue-400 flex items-center gap-1 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-zinc-800 shrink-0 ml-1"
                     >
-                      <Plus size={14} /> <span className="hidden sm:inline">Thêm ghi chú</span>
+                      <Plus size={16} /> <span className="hidden sm:inline">Thêm ghi chú</span>
                     </button>
                   </div>
                   {isAccordionOpen('ungrouped') && (
-                    <div className="p-3 md:p-4 pt-0 border-t border-zinc-800/50">
-                      {renderNotesGrid(ungroupedNotes, "mt-3 md:mt-4")}
+                    <div className="p-3.5 sm:p-4 pt-0 border-t border-zinc-800/50">
+                      {renderNotesGrid(ungroupedNotes, "mt-3 sm:mt-4")}
                     </div>
                   )}
                 </div>
@@ -2122,53 +2135,53 @@ export function NotesClient({
             />
 
             {/* Top Bar Navigation Header */}
-            <header className="h-14 px-4 sm:px-6 border-b border-zinc-800 flex items-center justify-between bg-[#14191d]/90 backdrop-blur shrink-0 gap-3">
+            <header className="h-14 sm:h-16 px-3 sm:px-6 border-b border-zinc-800 flex items-center justify-between bg-[#14191d]/90 backdrop-blur shrink-0 gap-2 sm:gap-3">
               {/* Nút Quay lại */}
               <button
                 type="button"
                 onClick={() => setIsNoteModalOpen(false)}
-                className="flex items-center gap-2 px-2.5 py-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-xl transition-colors text-xs sm:text-sm"
+                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 rounded-xl transition-colors text-xs sm:text-sm"
                 title="Đóng (Esc)"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={20} />
                 <span className="font-semibold hidden sm:inline">Quay lại</span>
               </button>
 
               {/* Trạng thái & Tiêu đề rút gọn ở Header */}
-              <div className="flex-1 min-w-0 flex items-center justify-center gap-2 px-2">
+              <div className="flex-1 min-w-0 flex items-center justify-center gap-2 px-1">
                 {/* Segmented Mode Switcher */}
-                <div className="flex items-center bg-zinc-800/90 p-0.5 rounded-xl border border-zinc-700/60 text-xs">
+                <div className="flex items-center bg-zinc-800/90 p-1 rounded-xl border border-zinc-700/60 text-xs sm:text-sm font-semibold">
                   <button
                     type="button"
                     onClick={() => setModalTab('edit')}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
                       modalTab === 'edit'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                     title="Chuyển sang chế độ chỉnh sửa"
                   >
-                    <PenLine size={13} />
-                    <span className="hidden sm:inline">Soạn thảo</span>
+                    <PenLine size={15} />
+                    <span>Soạn thảo</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalTab('preview')}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
                       modalTab === 'preview'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                     title="Chuyển sang chế độ xem trước trực quan"
                   >
-                    <Eye size={13} />
-                    <span className="hidden sm:inline">Xem trước</span>
+                    <Eye size={15} />
+                    <span>Xem trước</span>
                   </button>
                 </div>
               </div>
 
               {/* Action buttons góc phải */}
-              <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 {/* Nút Ghim */}
                 <button
                   type="button"
@@ -2176,7 +2189,7 @@ export function NotesClient({
                   className={`p-2 rounded-xl transition-colors text-xs ${editingNote.is_pinned ? 'text-amber-400 bg-amber-400/10' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}
                   title={editingNote.is_pinned ? "Bỏ ghim" : "Ghim ghi chú"}
                 >
-                  <Pin size={16} className={editingNote.is_pinned ? "fill-amber-400" : ""} />
+                  <Pin size={18} className={editingNote.is_pinned ? "fill-amber-400" : ""} />
                 </button>
 
                 {/* Nút Chèn ảnh vào nội dung */}
@@ -2190,7 +2203,7 @@ export function NotesClient({
                   className="p-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-xl transition-colors"
                   title="Chèn nhiều ảnh vào nội dung ghi chú (hoặc Ctrl+V dán ảnh)"
                 >
-                  <ImageIcon size={16} />
+                  <ImageIcon size={18} />
                 </button>
 
                 {/* Nút Đính kèm nhanh */}
@@ -2204,21 +2217,21 @@ export function NotesClient({
                   className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-xl transition-colors"
                   title="Đính kèm tệp / ảnh"
                 >
-                  <Paperclip size={16} />
+                  <Paperclip size={18} />
                 </button>
 
                 {/* Nút Mở rộng menu Tuỳ chọn (Nhóm, Màu, Tag) */}
                 <button
                   type="button"
                   onClick={() => setIsMetadataDrawerOpen(!isMetadataDrawerOpen)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all border ${
                     isMetadataDrawerOpen
                       ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
                       : "bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 border-zinc-700/80"
                   }`}
                   title="Tuỳ chọn nhóm, tag, màu sắc"
                 >
-                  <SlidersHorizontal size={14} />
+                  <SlidersHorizontal size={16} />
                   <span className="hidden md:inline">Tuỳ chọn</span>
                   {(editingNote.group_id || editTags.length > 0 || editingNote.color !== 'default') && (
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
@@ -2238,7 +2251,7 @@ export function NotesClient({
                     className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors hidden sm:flex"
                     title="Xoá ghi chú"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={18} />
                   </button>
                 )}
 
@@ -2246,9 +2259,9 @@ export function NotesClient({
                 <button
                   type="submit"
                   disabled={isUploading}
-                  className="px-4 sm:px-5 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-colors flex items-center gap-1.5"
+                  className="px-3.5 sm:px-5 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-colors flex items-center gap-1.5 shrink-0"
                 >
-                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  {isUploading ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
                   <span>{editingNote.id ? "Lưu" : "Tạo"}</span>
                 </button>
               </div>
@@ -2270,32 +2283,32 @@ export function NotesClient({
                     <button
                       type="button"
                       onClick={() => setIsMetadataDrawerOpen(true)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 hover:bg-zinc-700 text-blue-300 text-xs rounded-lg border border-zinc-700 transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-zinc-800/80 hover:bg-zinc-700 text-blue-300 text-xs sm:text-sm rounded-xl border border-zinc-700 transition-colors"
                     >
-                      <Folder size={12} className="text-blue-400" />
+                      <Folder size={14} className="text-blue-400" />
                       <span>{groups.find(g => g.id === editingNote.group_id)?.name || "Nhóm"}</span>
                     </button>
                   )}
                   {editTags.map(tagName => (
                     <span
                       key={tagName}
-                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/15 text-blue-300 border border-blue-500/30 text-[11px] rounded-md"
+                      className="flex items-center gap-1 px-2.5 py-1 bg-blue-600/15 text-blue-300 border border-blue-500/30 text-xs rounded-lg"
                     >
                       #{tagName}
                     </span>
                   ))}
                   {editingNote.color !== 'default' && (
-                    <div className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800/80 text-zinc-400 text-[11px] rounded-md border border-zinc-700">
-                      <span className={`w-2 h-2 rounded-full ${NOTE_COLORS.find(c => c.id === editingNote.color)?.bg || 'bg-zinc-600'}`} />
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 text-zinc-300 text-xs rounded-lg border border-zinc-700">
+                      <span className={`w-2.5 h-2.5 rounded-full ${NOTE_COLORS.find(c => c.id === editingNote.color)?.bg || 'bg-zinc-600'}`} />
                       <span>{NOTE_COLORS.find(c => c.id === editingNote.color)?.name}</span>
                     </div>
                   )}
                   <button
                     type="button"
                     onClick={() => setIsMetadataDrawerOpen(true)}
-                    className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 py-1 px-1.5 rounded hover:bg-zinc-800/50 transition-colors"
+                    className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
                   >
-                    <Plus size={12} /> {(!editingNote.group_id && editTags.length === 0) ? "Thêm nhóm / tag" : "Chỉnh sửa"}
+                    <Plus size={14} /> {(!editingNote.group_id && editTags.length === 0) ? "Thêm nhóm / tag" : "Chỉnh sửa"}
                   </button>
                 </div>
 
@@ -2303,7 +2316,7 @@ export function NotesClient({
                 {modalTab === 'preview' ? (
                   <div className="space-y-4 flex-1 flex flex-col">
                     {/* Tiêu đề xem trước */}
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-100 tracking-tight pb-2 border-b border-zinc-800/60 break-words">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100 tracking-tight pb-2 border-b border-zinc-800/60 break-words">
                       {editingNote.title?.trim() || "(Chưa có tiêu đề)"}
                     </h1>
 
@@ -2335,7 +2348,7 @@ export function NotesClient({
                       value={editingNote.title || ""}
                       onChange={(e) => setEditingNote(prev => prev ? { ...prev, title: e.target.value } : null)}
                       placeholder="Tiêu đề ghi chú..."
-                      className="w-full text-xl sm:text-2xl md:text-3xl font-bold text-zinc-100 placeholder:text-zinc-600 bg-transparent border-none outline-none tracking-tight pb-2"
+                      className="w-full text-2xl sm:text-3xl font-bold text-zinc-100 placeholder:text-zinc-600 bg-transparent border-none outline-none tracking-tight pb-2"
                     />
 
                     {/* Tệp / Ảnh đính kèm (nếu có) */}
@@ -2354,10 +2367,10 @@ export function NotesClient({
                       <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
                         <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
                           <span className="flex items-center gap-1.5">
-                            <ImageIcon size={14} className="text-emerald-400" />
+                            <ImageIcon size={16} className="text-emerald-400" />
                             Ảnh trong nội dung ({extractMarkdownImages(editingNote.content).length})
                           </span>
-                          <span className="text-[11px] text-zinc-500 font-normal">Click ảnh để xem lớn, bấm 🗑️ để gỡ khỏi nội dung</span>
+                          <span className="text-xs text-zinc-400 font-normal">Click ảnh để xem lớn, bấm 🗑️ để gỡ khỏi nội dung</span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
                           {extractMarkdownImages(editingNote.content).map((img, idx) => (
@@ -2366,37 +2379,37 @@ export function NotesClient({
                               className="relative group/modalImg rounded-xl overflow-hidden border border-zinc-700/80 bg-black/40 aspect-video flex items-center justify-center shadow-sm"
                             >
                               <img 
-                              src={img.url} 
-                              alt={img.alt} 
-                              className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/modalImg:scale-105"
-                              onClick={() => setLightboxImage(img.url)}
-                            />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/modalImg:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setLightboxImage(img.url); }}
-                                className="p-1.5 bg-black/80 hover:bg-zinc-700 text-white rounded-lg shadow transition-colors"
-                                title="Phóng to"
-                              >
-                                <Maximize2 size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingNote(prev => prev ? { ...prev, content: removeMarkdownImage(prev.content || '', img.url) } : null);
-                                }}
-                                className="p-1.5 bg-black/80 hover:bg-red-600 text-white rounded-lg shadow transition-colors"
-                                title="Gỡ ảnh khỏi bài"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                                src={img.url} 
+                                alt={img.alt} 
+                                className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/modalImg:scale-105"
+                                onClick={() => setLightboxImage(img.url)}
+                              />
+                              <div className="absolute inset-0 bg-black/50 opacity-100 sm:opacity-0 sm:group-hover/modalImg:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setLightboxImage(img.url); }}
+                                  className="p-2 bg-black/80 hover:bg-zinc-700 text-white rounded-lg shadow transition-colors"
+                                  title="Phóng to"
+                                >
+                                  <Maximize2 size={16} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingNote(prev => prev ? { ...prev, content: removeMarkdownImage(prev.content || '', img.url) } : null);
+                                  }}
+                                  className="p-2 bg-black/80 hover:bg-red-600 text-white rounded-lg shadow transition-colors"
+                                  title="Gỡ ảnh khỏi bài"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* Nội dung ghi chú (Spacious, full height textarea) */}
                   <div className="flex-1 flex flex-col min-h-[350px]">
@@ -2832,16 +2845,16 @@ function NoteCardItem({
         
         {/* Nội dung text */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex items-start justify-between gap-2 mb-1.5">
             <div className="flex flex-col gap-0.5 min-w-0">
               {group && (
-                <span className={`font-bold text-blue-400/90 uppercase tracking-wider flex items-center gap-1 ${viewMode === 'list' ? 'text-[10px] md:text-[11px]' : 'text-[11px] md:text-[10px]'}`}>
-                  <Folder size={11} />
+                <span className={`font-bold text-blue-400/90 uppercase tracking-wider flex items-center gap-1 ${viewMode === 'list' ? 'text-xs md:text-[11px]' : 'text-xs md:text-[11px]'}`}>
+                  <Folder size={12} />
                   {group.name}
                 </span>
               )}
               {note.title && (
-                <h4 className={`font-bold text-zinc-100 break-words ${viewMode === 'list' ? 'text-base md:text-sm line-clamp-1' : 'text-base md:text-sm line-clamp-2'}`}>
+                <h4 className={`font-bold text-zinc-100 break-words ${viewMode === 'list' ? 'text-base md:text-sm line-clamp-1' : 'text-base line-clamp-2'}`}>
                   {note.title}
                 </h4>
               )}
@@ -2851,26 +2864,26 @@ function NoteCardItem({
             {viewMode === 'grid' && (
               <button
                 onClick={(e) => onTogglePin(note, e)}
-                className={`p-1 rounded-lg transition-colors shrink-0 ${
+                className={`p-2 sm:p-1.5 rounded-xl transition-colors shrink-0 ${
                   note.is_pinned 
                     ? 'text-amber-400 opacity-100 bg-amber-500/10' 
                     : 'text-zinc-500 opacity-0 group-hover:opacity-100 hover:text-zinc-300'
                 }`}
                 title={note.is_pinned ? "Bỏ ghim" : "Ghim lên đầu"}
               >
-                <Pin size={14} />
+                <Pin size={16} className={note.is_pinned ? "fill-amber-400" : ""} />
               </button>
             )}
           </div>
 
           {cleanContent && (
-            <p className={`text-zinc-300 whitespace-pre-wrap break-words leading-relaxed ${viewMode === 'list' ? 'text-sm line-clamp-1' : 'text-sm md:text-xs line-clamp-6'}`}>
+            <p className={`text-zinc-300 whitespace-pre-wrap break-words leading-relaxed ${viewMode === 'list' ? 'text-sm line-clamp-1' : 'text-sm line-clamp-6'}`}>
               {cleanContent}
             </p>
           )}
 
           {/* Tags (Ẩn trên list view mobile cho gọn) */}
-          <div className={viewMode === 'list' ? 'hidden md:block mt-1' : ''}>
+          <div className={viewMode === 'list' ? 'hidden md:block mt-1.5' : ''}>
             {renderTags(note.id)}
           </div>
         </div>
@@ -2881,7 +2894,7 @@ function NoteCardItem({
             {getFileCategory(note.image_url) === 'image' ? (
               <div 
                 onClick={(e) => { e.stopPropagation(); onViewImage(note.image_url!); }}
-                className="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
+                className="w-14 h-14 md:w-14 md:h-14 rounded-xl overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
               >
                 <img src={note.image_url} alt="Note image" className="w-full h-full object-cover transition-transform group-hover/img:scale-105" />
               </div>
@@ -2891,11 +2904,11 @@ function NoteCardItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="h-9 md:h-10 px-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/80 hover:border-blue-500/50 flex items-center gap-2 text-xs text-zinc-200 transition-colors"
+                className="h-10 md:h-10 px-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/80 hover:border-blue-500/50 flex items-center gap-2 text-xs text-zinc-200 transition-colors"
                 title={getFileNameFromUrl(note.image_url)}
               >
-                <FileText size={15} className="text-blue-400 shrink-0" />
-                <span className="max-w-[100px] md:max-w-[140px] truncate text-[11px] font-medium">{getFileNameFromUrl(note.image_url)}</span>
+                <FileText size={16} className="text-blue-400 shrink-0" />
+                <span className="max-w-[120px] md:max-w-[140px] truncate text-xs font-medium">{getFileNameFromUrl(note.image_url)}</span>
               </a>
             )}
           </div>
@@ -2906,12 +2919,12 @@ function NoteCardItem({
           <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
             <div 
               onClick={(e) => { e.stopPropagation(); onViewImage(contentImages[0].url); }}
-              className="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
+              className="w-14 h-14 rounded-xl overflow-hidden bg-black/30 border border-zinc-700/50 relative group/img cursor-zoom-in"
               title={`${contentImages.length} ảnh trong ghi chú`}
             >
               <img src={contentImages[0].url} alt="Content image" className="w-full h-full object-cover transition-transform group-hover/img:scale-105" />
               {contentImages.length > 1 && (
-                <span className="absolute bottom-0.5 right-0.5 px-1 py-0.2 bg-black/80 text-[10px] text-white font-bold rounded">
+                <span className="absolute bottom-0.5 right-0.5 px-1.5 py-0.5 bg-black/80 text-[10px] text-white font-bold rounded">
                   +{contentImages.length - 1}
                 </span>
               )}
@@ -2921,49 +2934,49 @@ function NoteCardItem({
       </div>
 
       {/* FOOTER (Ngày tháng & Action buttons) */}
-      <div className={`flex items-center justify-between border-zinc-800/60 pt-2 border-t mt-1 ${viewMode === 'list' ? 'md:pt-3 md:mt-2' : 'pt-3 mt-3'}`}>
-        <span suppressHydrationWarning className={`text-zinc-500 font-mono ${viewMode === 'list' ? 'text-[11px]' : 'text-xs md:text-[11px]'}`}>
+      <div className={`flex items-center justify-between border-zinc-800/60 pt-2.5 border-t mt-1.5 ${viewMode === 'list' ? 'md:pt-3 md:mt-2' : 'pt-3 mt-3'}`}>
+        <span suppressHydrationWarning className="text-zinc-500 font-mono text-xs">
           {formatRelativeTime(note.created_at)}
         </span>
 
-        <div className={`flex items-center transition-opacity ${viewMode === 'list' ? 'gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100' : 'gap-1.5 md:gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}>
+        <div className={`flex items-center transition-opacity ${viewMode === 'list' ? 'gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100' : 'gap-1.5 md:gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}>
           {/* Nút ghim trong List View */}
           {viewMode === 'list' && (
             <button
               onClick={(e) => onTogglePin(note, e)}
-              className={`p-1 rounded transition-colors ${note.is_pinned ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-400 hover:text-amber-400'}`}
+              className={`p-2 sm:p-1.5 rounded-xl transition-colors ${note.is_pinned ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-400 hover:text-amber-400'}`}
               title={note.is_pinned ? "Bỏ ghim" : "Ghim"}
             >
-              <Pin size={13} />
+              <Pin size={15} />
             </button>
           )}
 
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
-              className="p-1 hover:text-blue-400 text-zinc-400 rounded transition-colors"
+              className="p-2 sm:p-1.5 hover:text-blue-400 text-zinc-400 rounded-xl transition-colors"
               title="Đổi màu"
             >
-              <Palette size={13} />
+              <Palette size={15} />
             </button>
             {showColorPicker && (
-              <div onClick={(e) => e.stopPropagation()} className={`absolute z-30 p-1.5 bg-[#20262b] border border-zinc-700 rounded-xl shadow-xl flex items-center gap-1 ${viewMode === 'list' ? 'right-0 top-full mt-1' : 'bottom-full right-0 mb-1'}`}>
+              <div onClick={(e) => e.stopPropagation()} className={`absolute z-30 p-2 bg-[#20262b] border border-zinc-700 rounded-2xl shadow-2xl flex items-center gap-1.5 ${viewMode === 'list' ? 'right-0 top-full mt-1' : 'bottom-full right-0 mb-1'}`}>
                 {NOTE_COLORS.map(c => (
                   <button
                     key={c.id}
                     onClick={(e) => { onChangeColor(note, c.id, e); setShowColorPicker(false); }}
-                    className={`w-4 h-4 rounded-full border transition-transform ${c.bg} ${note.color === c.id ? 'scale-125 border-blue-400' : 'border-zinc-600'}`}
+                    className={`w-6 h-6 rounded-full border transition-transform ${c.bg} ${note.color === c.id ? 'scale-110 border-blue-400 ring-2 ring-blue-500/40' : 'border-zinc-600'}`}
                   />
                 ))}
               </div>
             )}
           </div>
           
-          <button onClick={(e) => onCopyNote(note, e)} className="p-1 hover:text-emerald-400 text-zinc-400 rounded transition-colors" title="Sao chép">
-            {copiedId === note.id ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+          <button onClick={(e) => onCopyNote(note, e)} className="p-2 sm:p-1.5 hover:text-emerald-400 text-zinc-400 rounded-xl transition-colors" title="Sao chép">
+            {copiedId === note.id ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
           </button>
-          <button onClick={(e) => { e.stopPropagation(); onDeleteNote(note); }} className="p-1 hover:text-red-400 text-zinc-400 rounded transition-colors" title="Xoá">
-            <Trash2 size={13} />
+          <button onClick={(e) => { e.stopPropagation(); onDeleteNote(note); }} className="p-2 sm:p-1.5 hover:text-red-400 text-zinc-400 rounded-xl transition-colors" title="Xoá">
+            <Trash2 size={15} />
           </button>
         </div>
       </div>
