@@ -89,3 +89,102 @@ CREATE POLICY "Anyone can view note images" ON storage.objects
 
 CREATE POLICY "Users can delete note images" ON storage.objects
     FOR DELETE USING (bucket_id = 'note-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ==========================================
+-- STORED PROCEDURES / RPC FUNCTIONS
+-- ==========================================
+
+-- Tạo note và liên kết tags trong 1 transaction an toàn
+CREATE OR REPLACE FUNCTION public.create_note_with_tags(
+  p_group_id uuid,
+  p_title text,
+  p_content text,
+  p_type text,
+  p_image_url text,
+  p_source_app text,
+  p_color text,
+  p_is_pinned boolean,
+  p_order integer,
+  p_tag_ids uuid[]
+)
+RETURNS public.notes
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_note public.notes;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required' USING errcode = '28000';
+  END IF;
+
+  INSERT INTO public.notes (
+    user_id, group_id, title, content, type, image_url, source_app,
+    color, is_pinned, "order"
+  ) VALUES (
+    auth.uid(), p_group_id, p_title, p_content, p_type, p_image_url,
+    p_source_app, coalesce(p_color, 'default'), coalesce(p_is_pinned, false),
+    coalesce(p_order, 0)
+  )
+  RETURNING * INTO v_note;
+
+  INSERT INTO public.note_tags (note_id, tag_id)
+  SELECT v_note.id, requested_tag.tag_id
+  FROM unnest(coalesce(p_tag_ids, array[]::uuid[])) AS requested_tag(tag_id)
+  ON CONFLICT DO NOTHING;
+
+  RETURN v_note;
+END;
+$$;
+
+-- Cập nhật note và làm mới liên kết tags trong 1 transaction an toàn
+CREATE OR REPLACE FUNCTION public.update_note_with_tags(
+  p_note_id uuid,
+  p_group_id uuid,
+  p_title text,
+  p_content text,
+  p_type text,
+  p_image_url text,
+  p_color text,
+  p_is_pinned boolean,
+  p_tag_ids uuid[]
+)
+RETURNS public.notes
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_note public.notes;
+BEGIN
+  UPDATE public.notes
+  SET title = p_title,
+      content = p_content,
+      group_id = p_group_id,
+      color = coalesce(p_color, 'default'),
+      is_pinned = coalesce(p_is_pinned, false),
+      image_url = p_image_url,
+      type = p_type,
+      updated_at = now()
+  WHERE id = p_note_id
+  RETURNING * INTO v_note;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Note not found or update not permitted' USING errcode = 'P0002';
+  END IF;
+
+  DELETE FROM public.note_tags WHERE note_id = p_note_id;
+
+  INSERT INTO public.note_tags (note_id, tag_id)
+  SELECT p_note_id, requested_tag.tag_id
+  FROM unnest(coalesce(p_tag_ids, array[]::uuid[])) AS requested_tag(tag_id)
+  ON CONFLICT DO NOTHING;
+
+  RETURN v_note;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.create_note_with_tags(uuid, text, text, text, text, text, text, boolean, integer, uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_note_with_tags(uuid, uuid, text, text, text, text, text, boolean, uuid[]) TO authenticated;
+

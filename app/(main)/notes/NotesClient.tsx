@@ -30,7 +30,9 @@ import {
   FileSpreadsheet,
   ArrowLeft,
   Loader2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Eye,
+  PenLine
 } from "lucide-react";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
@@ -381,6 +383,180 @@ function formatRelativeTime(dateStr: string) {
   }
 }
 
+// Trích xuất thông điệp lỗi chi tiết từ PostgREST / Supabase
+export function formatErrorMessage(err: unknown, defaultMsg: string): string {
+  if (!err) return defaultMsg;
+  if (typeof err === 'object') {
+    const pErr = err as { message?: string; details?: string; hint?: string; code?: string };
+    if (pErr.code === 'PGRST202') {
+      return "Database Supabase chưa được cài đặt hàm RPC (lỗi PGRST202). Vui lòng mở Supabase Dashboard > SQL Editor và chạy nội dung file migration SQL (supabase_notes.sql).";
+    }
+    if (pErr.message) {
+      let msg = pErr.message;
+      if (pErr.details) msg += ` - ${pErr.details}`;
+      if (pErr.hint) msg += ` (Gợi ý: ${pErr.hint})`;
+      return msg;
+    }
+  }
+  if (err instanceof Error) return err.message;
+  return String(err) || defaultMsg;
+}
+
+// Xử lý định dạng in đậm (**text**) và mã inline (`code`)
+function formatBoldAndCode(text: string): React.ReactNode {
+  if (!text) return null;
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return <strong key={i} className="font-semibold text-zinc-100">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return <code key={i} className="px-1.5 py-0.5 rounded bg-zinc-800 text-amber-300 text-xs font-mono">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
+
+// Định dạng văn bản chứa liên kết URL clickable
+function formatInlineText(text: string): React.ReactNode {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  if (parts.length === 1) {
+    return formatBoldAndCode(text);
+  }
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all inline-flex items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span>{part}</span>
+          <ExternalLink size={11} className="inline ml-0.5 opacity-70" />
+        </a>
+      );
+    }
+    return formatBoldAndCode(part);
+  });
+}
+
+// Component hiển thị nội dung Markdown & Ảnh trực quan (Preview Mode)
+export function NoteMarkdownPreview({ 
+  content, 
+  onViewImage 
+}: { 
+  content: string; 
+  onViewImage: (url: string) => void; 
+}) {
+  if (!content || !content.trim()) {
+    return (
+      <div className="text-zinc-500 italic text-sm py-6 text-center border border-dashed border-zinc-800 rounded-2xl">
+        Chưa có nội dung văn bản.
+      </div>
+    );
+  }
+
+  const imageRegex = /!\[(.*?)\]\(((?:https?:\/\/|data:image\/|\/)[^\s\)]+)\)/g;
+  const segments: Array<{ type: 'text' | 'image'; text?: string; alt?: string; url?: string }> = [];
+  let lastIdx = 0;
+  let match;
+  
+  while ((match = imageRegex.exec(content)) !== null) {
+    if (match.index > lastIdx) {
+      segments.push({
+        type: 'text',
+        text: content.substring(lastIdx, match.index)
+      });
+    }
+    segments.push({
+      type: 'image',
+      alt: match[1] || 'Hình ảnh',
+      url: match[2]
+    });
+    lastIdx = imageRegex.lastIndex;
+  }
+  
+  if (lastIdx < content.length) {
+    segments.push({
+      type: 'text',
+      text: content.substring(lastIdx)
+    });
+  }
+
+  return (
+    <div className="space-y-4 text-zinc-200 leading-relaxed text-sm sm:text-base">
+      {segments.map((seg, i) => {
+        if (seg.type === 'image' && seg.url) {
+          return (
+            <div key={i} className="my-3 rounded-2xl overflow-hidden bg-black/40 border border-zinc-700/80 shadow-md group/prevImg relative flex flex-col items-center max-w-2xl">
+              <img
+                src={seg.url}
+                alt={seg.alt || 'Hình ảnh'}
+                className="w-full max-h-[480px] object-contain cursor-zoom-in transition-transform group-hover/prevImg:scale-[1.01]"
+                onClick={() => onViewImage(seg.url!)}
+              />
+              <div 
+                onClick={() => onViewImage(seg.url!)}
+                className="absolute inset-0 bg-black/20 opacity-0 group-hover/prevImg:opacity-100 flex items-center justify-center transition-opacity cursor-zoom-in"
+              >
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-black/80 text-white text-xs font-semibold rounded-xl shadow backdrop-blur-sm">
+                  <Maximize2 size={13} /> Phóng to ảnh
+                </span>
+              </div>
+              {seg.alt && seg.alt !== 'Hình ảnh' && (
+                <div className="w-full text-center py-1.5 px-3 bg-zinc-900/90 text-xs text-zinc-400 border-t border-zinc-800">
+                  {seg.alt}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        const textLines = (seg.text || '').split('\n');
+        return (
+          <div key={i} className="space-y-2">
+            {textLines.map((line, lIdx) => {
+              const trimmed = line.trim();
+              if (!trimmed) {
+                return <div key={lIdx} className="h-2" />;
+              }
+
+              if (trimmed.startsWith('### ')) {
+                return <h3 key={lIdx} className="text-base sm:text-lg font-bold text-zinc-100 pt-2">{trimmed.substring(4)}</h3>;
+              }
+              if (trimmed.startsWith('## ')) {
+                return <h2 key={lIdx} className="text-lg sm:text-xl font-bold text-zinc-100 pt-3">{trimmed.substring(3)}</h2>;
+              }
+              if (trimmed.startsWith('# ')) {
+                return <h1 key={lIdx} className="text-xl sm:text-2xl font-bold text-zinc-100 pt-4">{trimmed.substring(2)}</h1>;
+              }
+
+              if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                return (
+                  <div key={lIdx} className="flex items-start gap-2 pl-2">
+                    <span className="text-blue-400 mt-1.5">•</span>
+                    <span className="flex-1 break-words">{formatInlineText(trimmed.substring(2))}</span>
+                  </div>
+                );
+              }
+
+              return (
+                <p key={lIdx} className="whitespace-pre-wrap break-words leading-relaxed text-zinc-300">
+                  {formatInlineText(line)}
+                </p>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function NotesClient({
   userId,
   initialGroups = [],
@@ -428,6 +604,7 @@ export function NotesClient({
     });
     setEditTags([]);
     setEditTagInput("");
+    setModalTab('edit');
     setIsMetadataDrawerOpen(false);
     setIsNoteModalOpen(true);
   };
@@ -461,6 +638,7 @@ export function NotesClient({
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState("");
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'edit' | 'preview'>('edit');
   const [isMetadataDrawerOpen, setIsMetadataDrawerOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
@@ -554,7 +732,7 @@ export function NotesClient({
       if (data.url) return data.url;
       return null;
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Không thể tải tệp lên";
+      const message = formatErrorMessage(err, "Không thể tải tệp lên");
       setAlertConfig({
         isOpen: true,
         title: "Lỗi tải tệp",
@@ -759,7 +937,7 @@ export function NotesClient({
       setNewIsPinned(false);
       setIsComposerExpanded(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể lưu ghi chú";
+      const message = formatErrorMessage(error, "Không thể lưu ghi chú");
       setAlertConfig({
         isOpen: true,
         title: "Lỗi lưu ghi chú",
@@ -776,6 +954,7 @@ export function NotesClient({
     const currentTagNames = tags.filter(t => currentTagIds.includes(t.id)).map(t => t.name);
     setEditTags(currentTagNames);
     setEditTagInput("");
+    setModalTab('edit');
     setIsMetadataDrawerOpen(false);
     setIsNoteModalOpen(true);
   };
@@ -925,7 +1104,7 @@ export function NotesClient({
         setIsNoteModalOpen(false);
         setEditingNote(null);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Không thể tạo ghi chú";
+        const message = formatErrorMessage(error, "Không thể tạo ghi chú");
         setAlertConfig({
           isOpen: true,
           title: "Lỗi tạo ghi chú",
@@ -968,7 +1147,7 @@ export function NotesClient({
       setIsNoteModalOpen(false);
       setEditingNote(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể cập nhật ghi chú";
+      const message = formatErrorMessage(error, "Không thể cập nhật ghi chú");
       setAlertConfig({
         isOpen: true,
         title: "Lỗi cập nhật",
@@ -1956,10 +2135,36 @@ export function NotesClient({
               </button>
 
               {/* Trạng thái & Tiêu đề rút gọn ở Header */}
-              <div className="flex-1 min-w-0 text-center px-2">
-                <span className="text-xs font-semibold text-zinc-400 truncate block">
-                  {editingNote.id ? (editingNote.title ? editingNote.title : "Chỉnh sửa ghi chú") : "Tạo ghi chú mới"}
-                </span>
+              <div className="flex-1 min-w-0 flex items-center justify-center gap-2 px-2">
+                {/* Segmented Mode Switcher */}
+                <div className="flex items-center bg-zinc-800/90 p-0.5 rounded-xl border border-zinc-700/60 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('edit')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                      modalTab === 'edit'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    title="Chuyển sang chế độ chỉnh sửa"
+                  >
+                    <PenLine size={13} />
+                    <span className="hidden sm:inline">Soạn thảo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('preview')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                      modalTab === 'preview'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    title="Chuyển sang chế độ xem trước trực quan"
+                  >
+                    <Eye size={13} />
+                    <span className="hidden sm:inline">Xem trước</span>
+                  </button>
+                </div>
               </div>
 
               {/* Action buttons góc phải */}
@@ -1977,7 +2182,10 @@ export function NotesClient({
                 {/* Nút Chèn ảnh vào nội dung */}
                 <button
                   type="button"
-                  onClick={() => modalContentImageInputRef.current?.click()}
+                  onClick={() => {
+                    setModalTab('edit');
+                    modalContentImageInputRef.current?.click();
+                  }}
                   disabled={isUploading}
                   className="p-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-xl transition-colors"
                   title="Chèn nhiều ảnh vào nội dung ghi chú (hoặc Ctrl+V dán ảnh)"
@@ -1988,7 +2196,10 @@ export function NotesClient({
                 {/* Nút Đính kèm nhanh */}
                 <button
                   type="button"
-                  onClick={() => modalImageInputRef.current?.click()}
+                  onClick={() => {
+                    setModalTab('edit');
+                    modalImageInputRef.current?.click();
+                  }}
                   disabled={isUploading}
                   className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 rounded-xl transition-colors"
                   title="Đính kèm tệp / ảnh"
@@ -2088,95 +2299,126 @@ export function NotesClient({
                   </button>
                 </div>
 
-                {/* Tiêu đề ghi chú (Seamless Borderless) */}
-                <input
-                  type="text"
-                  autoFocus={!editingNote.id}
-                  value={editingNote.title || ""}
-                  onChange={(e) => setEditingNote(prev => prev ? { ...prev, title: e.target.value } : null)}
-                  placeholder="Tiêu đề ghi chú..."
-                  className="w-full text-xl sm:text-2xl md:text-3xl font-bold text-zinc-100 placeholder:text-zinc-600 bg-transparent border-none outline-none tracking-tight pb-2"
-                />
+                {/* NỘI DUNG Ở CHẾ ĐỘ XEM TRƯỚC (PREVIEW MODE) */}
+                {modalTab === 'preview' ? (
+                  <div className="space-y-4 flex-1 flex flex-col">
+                    {/* Tiêu đề xem trước */}
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-100 tracking-tight pb-2 border-b border-zinc-800/60 break-words">
+                      {editingNote.title?.trim() || "(Chưa có tiêu đề)"}
+                    </h1>
 
-                {/* Tệp / Ảnh đính kèm (nếu có) */}
-                {editingNote.image_url && (
-                  <div className="py-2">
-                    <AttachmentDisplay
-                      url={editingNote.image_url}
-                      onRemove={() => setEditingNote(prev => prev ? { ...prev, image_url: null } : null)}
-                      onViewImage={setLightboxImage}
+                    {/* Tệp / Ảnh đính kèm */}
+                    {editingNote.image_url && (
+                      <div className="py-2">
+                        <AttachmentDisplay
+                          url={editingNote.image_url}
+                          onViewImage={setLightboxImage}
+                        />
+                      </div>
+                    )}
+
+                    {/* Nội dung Markdown & Ảnh Inline */}
+                    <div className="flex-1 pt-2">
+                      <NoteMarkdownPreview
+                        content={editingNote.content || ""}
+                        onViewImage={setLightboxImage}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* NỘI DUNG Ở CHẾ ĐỘ SOẠN THẢO (EDIT MODE) */
+                  <>
+                    {/* Tiêu đề ghi chú (Seamless Borderless) */}
+                    <input
+                      type="text"
+                      autoFocus={!editingNote.id}
+                      value={editingNote.title || ""}
+                      onChange={(e) => setEditingNote(prev => prev ? { ...prev, title: e.target.value } : null)}
+                      placeholder="Tiêu đề ghi chú..."
+                      className="w-full text-xl sm:text-2xl md:text-3xl font-bold text-zinc-100 placeholder:text-zinc-600 bg-transparent border-none outline-none tracking-tight pb-2"
+                    />
+
+                    {/* Tệp / Ảnh đính kèm (nếu có) */}
+                    {editingNote.image_url && (
+                      <div className="py-2">
+                        <AttachmentDisplay
+                          url={editingNote.image_url}
+                          onRemove={() => setEditingNote(prev => prev ? { ...prev, image_url: null } : null)}
+                          onViewImage={setLightboxImage}
+                        />
+                      </div>
+                    )}
+
+                    {/* Danh sách ảnh đã chèn trong nội dung (Modal preview & management) */}
+                    {editingNote.content && extractMarkdownImages(editingNote.content).length > 0 && (
+                      <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
+                          <span className="flex items-center gap-1.5">
+                            <ImageIcon size={14} className="text-emerald-400" />
+                            Ảnh trong nội dung ({extractMarkdownImages(editingNote.content).length})
+                          </span>
+                          <span className="text-[11px] text-zinc-500 font-normal">Click ảnh để xem lớn, bấm 🗑️ để gỡ khỏi nội dung</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
+                          {extractMarkdownImages(editingNote.content).map((img, idx) => (
+                            <div 
+                              key={idx} 
+                              className="relative group/modalImg rounded-xl overflow-hidden border border-zinc-700/80 bg-black/40 aspect-video flex items-center justify-center shadow-sm"
+                            >
+                              <img 
+                              src={img.url} 
+                              alt={img.alt} 
+                              className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/modalImg:scale-105"
+                              onClick={() => setLightboxImage(img.url)}
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/modalImg:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setLightboxImage(img.url); }}
+                                className="p-1.5 bg-black/80 hover:bg-zinc-700 text-white rounded-lg shadow transition-colors"
+                                title="Phóng to"
+                              >
+                                <Maximize2 size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingNote(prev => prev ? { ...prev, content: removeMarkdownImage(prev.content || '', img.url) } : null);
+                                }}
+                                className="p-1.5 bg-black/80 hover:bg-red-600 text-white rounded-lg shadow transition-colors"
+                                title="Gỡ ảnh khỏi bài"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Nội dung ghi chú (Spacious, full height textarea) */}
+                  <div className="flex-1 flex flex-col min-h-[350px]">
+                    <textarea
+                      ref={modalTextareaRef}
+                      value={editingNote.content || ""}
+                      onChange={(e) => setEditingNote(prev => prev ? { ...prev, content: e.target.value } : null)}
+                      placeholder="Bắt đầu viết nội dung ghi chú ở đây... (Hỗ trợ Ctrl+V dán nhiều hình ảnh hoặc kéo thả tệp)"
+                      className="w-full flex-1 bg-transparent text-zinc-200 placeholder:text-zinc-600 text-sm sm:text-base leading-relaxed md:leading-loose resize-none outline-none font-sans p-0 min-h-[350px]"
                     />
                   </div>
+                </>
+              )}
+
+              {/* Bottom footer status */}
+              <div className="pt-4 border-t border-zinc-800/60 flex items-center justify-between text-xs text-zinc-500">
+                <span>{editingNote.content ? `${editingNote.content.length} ký tự` : "0 ký tự"}</span>
+                {editingNote.updated_at && (
+                  <span>Cập nhật: {new Date(editingNote.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} {new Date(editingNote.updated_at).toLocaleDateString('vi-VN')}</span>
                 )}
-
-                {/* Danh sách ảnh đã chèn trong nội dung (Modal preview & management) */}
-                {editingNote.content && extractMarkdownImages(editingNote.content).length > 0 && (
-                  <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
-                      <span className="flex items-center gap-1.5">
-                        <ImageIcon size={14} className="text-emerald-400" />
-                        Ảnh trong nội dung ({extractMarkdownImages(editingNote.content).length})
-                      </span>
-                      <span className="text-[11px] text-zinc-500 font-normal">Click ảnh để xem lớn, bấm 🗑️ để gỡ khỏi nội dung</span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
-                      {extractMarkdownImages(editingNote.content).map((img, idx) => (
-                        <div 
-                          key={idx} 
-                          className="relative group/modalImg rounded-xl overflow-hidden border border-zinc-700/80 bg-black/40 aspect-video flex items-center justify-center shadow-sm"
-                        >
-                          <img 
-                            src={img.url} 
-                            alt={img.alt} 
-                            className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/modalImg:scale-105"
-                            onClick={() => setLightboxImage(img.url)}
-                          />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/modalImg:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setLightboxImage(img.url); }}
-                              className="p-1.5 bg-black/80 hover:bg-zinc-700 text-white rounded-lg shadow transition-colors"
-                              title="Phóng to"
-                            >
-                              <Maximize2 size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingNote(prev => prev ? { ...prev, content: removeMarkdownImage(prev.content || '', img.url) } : null);
-                              }}
-                              className="p-1.5 bg-black/80 hover:bg-red-600 text-white rounded-lg shadow transition-colors"
-                              title="Gỡ ảnh khỏi bài"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Nội dung ghi chú (Spacious, full height textarea) */}
-                <div className="flex-1 flex flex-col min-h-[350px]">
-                  <textarea
-                    ref={modalTextareaRef}
-                    value={editingNote.content || ""}
-                    onChange={(e) => setEditingNote(prev => prev ? { ...prev, content: e.target.value } : null)}
-                    placeholder="Bắt đầu viết nội dung ghi chú ở đây... (Hỗ trợ Ctrl+V dán nhiều hình ảnh hoặc kéo thả tệp)"
-                    className="w-full flex-1 bg-transparent text-zinc-200 placeholder:text-zinc-600 text-sm sm:text-base leading-relaxed md:leading-loose resize-none outline-none font-sans p-0 min-h-[350px]"
-                  />
-                </div>
-
-                {/* Bottom footer status */}
-                <div className="pt-4 border-t border-zinc-800/60 flex items-center justify-between text-xs text-zinc-500">
-                  <span>{editingNote.content ? `${editingNote.content.length} ký tự` : "0 ký tự"}</span>
-                  {editingNote.updated_at && (
-                    <span>Cập nhật: {new Date(editingNote.updated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} {new Date(editingNote.updated_at).toLocaleDateString('vi-VN')}</span>
-                  )}
-                </div>
-              </main>
+              </div>
+            </main>
 
               {/* EXPANDABLE SETTINGS / PROPERTIES DRAWER (Tuỳ chọn mở rộng) */}
               {isMetadataDrawerOpen && (
