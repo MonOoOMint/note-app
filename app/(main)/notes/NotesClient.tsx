@@ -20,6 +20,7 @@ import {
   ExternalLink,
   ChevronRight,
   Folder,
+  ArrowUpDown,
   SlidersHorizontal,
   Maximize2,
   FileText,
@@ -91,6 +92,61 @@ export interface Note {
 export interface NoteTag {
   note_id: string;
   tag_id: string;
+}
+
+export type NoteSortOption = 'created_desc' | 'updated_desc' | 'created_asc' | 'updated_asc';
+
+export const SORT_OPTIONS: { id: NoteSortOption; label: string; shortLabel: string; desc: string }[] = [
+  {
+    id: 'updated_desc',
+    label: 'Mới nhất (Cập nhật & Tạo)',
+    shortLabel: 'Mới nhất',
+    desc: 'Ghi chú vừa tạo hoặc vừa chỉnh sửa sẽ hiển thị trước tiên'
+  },
+  {
+    id: 'created_desc',
+    label: 'Ngày tạo: Mới nhất',
+    shortLabel: 'Tạo mới nhất',
+    desc: 'Ghi chú tạo gần đây nhất hiển thị trước (bỏ qua chỉnh sửa)'
+  },
+  {
+    id: 'created_asc',
+    label: 'Ngày tạo: Cũ nhất',
+    shortLabel: 'Tạo cũ nhất',
+    desc: 'Ghi chú tạo đầu tiên sẽ hiển thị trước'
+  },
+  {
+    id: 'updated_asc',
+    label: 'Ngày cập nhật: Cũ nhất',
+    shortLabel: 'Sửa cũ nhất',
+    desc: 'Ghi chú ít chỉnh sửa nhất sẽ hiển thị trước'
+  }
+];
+
+export function compareNotes(a: Note, b: Note, sort: NoteSortOption): number {
+  if (sort === 'created_desc') {
+    const timeA = new Date(a.created_at).getTime();
+    const timeB = new Date(b.created_at).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+  }
+  if (sort === 'created_asc') {
+    const timeA = new Date(a.created_at).getTime();
+    const timeB = new Date(b.created_at).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
+  }
+  if (sort === 'updated_asc') {
+    const timeA = new Date(a.updated_at || a.created_at).getTime();
+    const timeB = new Date(b.updated_at || b.created_at).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  }
+  // Mặc định: 'updated_desc' (Ngày tạo và ngày cập nhật mới nhất)
+  const timeA = new Date(a.updated_at || a.created_at).getTime();
+  const timeB = new Date(b.updated_at || b.created_at).getTime();
+  if (timeB !== timeA) return timeB - timeA;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 }
 
 interface NotesClientProps {
@@ -577,6 +633,9 @@ export function NotesClient({
   const [selectedFilter, setSelectedFilter] = useState<string>('all'); // 'all' | 'pinned' | 'images' | `group:${groupId}` | `tag:${tagId}`
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [sortBy, setSortBy] = useState<NoteSortOption>('updated_desc');
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Accordion State
@@ -682,6 +741,12 @@ export function NotesClient({
       if (savedView === 'grid' || savedView === 'list') {
         setViewMode(savedView);
       }
+      const savedSort = localStorage.getItem('notes_sort_order') as NoteSortOption;
+      if (savedSort && ['created_desc', 'updated_desc', 'created_asc', 'updated_asc'].includes(savedSort)) {
+        setSortBy(savedSort);
+      } else {
+        setSortBy('updated_desc');
+      }
     } catch {}
   }, []);
 
@@ -706,13 +771,21 @@ export function NotesClient({
     try { localStorage.setItem('notes_view_mode', mode); } catch {}
   };
 
-  // Close composer when clicking outside if empty
+  const changeSortBy = (sort: NoteSortOption) => {
+    setSortBy(sort);
+    try { localStorage.setItem('notes_sort_order', sort); } catch {}
+  };
+
+  // Close composer / sort dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (composerRef.current && !composerRef.current.contains(e.target as Node)) {
         if (!newTitle.trim() && !newContent.trim() && !newImageUrl) {
           setIsComposerExpanded(false);
         }
+      }
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
+        setIsSortDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -1355,8 +1428,12 @@ export function NotesClient({
     return true;
   });
 
-  const pinnedNotes = filteredNotes.filter(n => n.is_pinned);
-  const otherNotes = filteredNotes.filter(n => !n.is_pinned);
+  const sortedNotes = React.useMemo(() => {
+    return [...filteredNotes].sort((a, b) => compareNotes(a, b, sortBy));
+  }, [filteredNotes, sortBy]);
+
+  const pinnedNotes = React.useMemo(() => sortedNotes.filter(n => n.is_pinned), [sortedNotes]);
+  const otherNotes = React.useMemo(() => sortedNotes.filter(n => !n.is_pinned), [sortedNotes]);
 
   // Group notes for Accordion view
   const { groupedNotesMap, ungroupedNotes } = React.useMemo(() => {
@@ -1386,6 +1463,7 @@ export function NotesClient({
             groups={groups}
             copiedId={copiedId}
             viewMode={viewMode}
+            sortBy={sortBy}
             onOpenEdit={handleOpenEdit}
             onTogglePin={handleTogglePin}
             onChangeColor={handleChangeColor}
@@ -1629,6 +1707,63 @@ export function NotesClient({
             >
               <Search size={18} />
             </button>
+
+            {/* Bộ chọn sắp xếp (Sort Dropdown) */}
+            <div className="relative" ref={sortDropdownRef}>
+              <button
+                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium border transition-all ${
+                  isSortDropdownOpen 
+                    ? 'bg-blue-600/20 text-blue-400 border-blue-500/40' 
+                    : 'bg-[#20262b] text-zinc-300 hover:text-white border-zinc-700/80 hover:border-zinc-600'
+                }`}
+                title="Sắp xếp ghi chú"
+              >
+                <ArrowUpDown size={15} className="text-blue-400 shrink-0" />
+                <span className="hidden sm:inline">
+                  {SORT_OPTIONS.find(o => o.id === sortBy)?.shortLabel || 'Sắp xếp'}
+                </span>
+                <ChevronDown size={13} className={`transition-transform duration-200 text-zinc-400 ${isSortDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSortDropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-[#181d20] border border-zinc-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-800 flex items-center justify-between">
+                    <span>Sắp xếp ghi chú</span>
+                    <ArrowUpDown size={12} className="text-blue-400" />
+                  </div>
+                  <div className="py-1 space-y-0.5">
+                    {SORT_OPTIONS.map((opt) => {
+                      const isSelected = sortBy === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => {
+                            changeSortBy(opt.id);
+                            setIsSortDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between text-left transition-colors ${
+                            isSelected
+                              ? 'bg-blue-600/20 text-blue-300 font-semibold'
+                              : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="flex items-center gap-1.5">
+                              {opt.label}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 line-clamp-1">
+                              {opt.desc}
+                            </span>
+                          </div>
+                          {isSelected && <Check size={14} className="text-blue-400 shrink-0 ml-2" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex items-center gap-1 bg-[#20262b] p-1 rounded-xl border border-zinc-700/80">
               <button
@@ -2648,16 +2783,17 @@ export function NotesClient({
               <>
                 <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider px-1">KẾT QUẢ TÌM KIẾM</p>
                 <div className="grid grid-cols-1 gap-4">
-                  {filteredNotes.length === 0 ? (
+                  {sortedNotes.length === 0 ? (
                     <div className="text-center py-10 text-zinc-500">Không tìm thấy ghi chú nào</div>
                   ) : (
-                    filteredNotes.map(note => (
+                    sortedNotes.map(note => (
                       <NoteCardItem
                         key={note.id}
                         note={note}
                         groups={groups}
                         copiedId={copiedId}
                         viewMode="grid"
+                        sortBy={sortBy}
                         onOpenEdit={handleOpenEdit}
                         onTogglePin={handleTogglePin}
                         onChangeColor={handleChangeColor}
@@ -2738,6 +2874,7 @@ interface NoteCardItemProps {
   groups: NoteGroup[];
   copiedId: string | null;
   viewMode: 'grid' | 'list';
+  sortBy?: NoteSortOption;
   onOpenEdit: (note: Note) => void;
   onTogglePin: (note: Note, e?: React.MouseEvent) => void;
   onChangeColor: (note: Note, colorId: string, e?: React.MouseEvent) => void;
@@ -2752,6 +2889,7 @@ function NoteCardItem({
   groups,
   copiedId,
   viewMode,
+  sortBy,
   onOpenEdit,
   onTogglePin,
   onChangeColor,
@@ -2935,8 +3073,30 @@ function NoteCardItem({
 
       {/* FOOTER (Ngày tháng & Action buttons) */}
       <div className={`flex items-center justify-between border-zinc-800/60 pt-2.5 border-t mt-1.5 ${viewMode === 'list' ? 'md:pt-3 md:mt-2' : 'pt-3 mt-3'}`}>
-        <span suppressHydrationWarning className="text-zinc-500 font-mono text-xs">
-          {formatRelativeTime(note.created_at)}
+        <span 
+          suppressHydrationWarning 
+          className="text-zinc-500 font-mono text-xs"
+          title={`Ngày tạo: ${new Date(note.created_at).toLocaleString('vi-VN')}${note.updated_at && note.updated_at !== note.created_at ? `\nNgày sửa: ${new Date(note.updated_at).toLocaleString('vi-VN')}` : ''}`}
+        >
+          {(sortBy === 'updated_desc' || sortBy === 'updated_asc') ? (
+            note.updated_at && note.updated_at !== note.created_at ? (
+              <span className="flex items-center gap-1 text-blue-400">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 font-sans font-medium">Đã sửa</span>
+                <span>{formatRelativeTime(note.updated_at)}</span>
+              </span>
+            ) : (
+              formatRelativeTime(note.created_at)
+            )
+          ) : (
+            note.updated_at && note.updated_at !== note.created_at ? (
+              <span className="flex items-center gap-1">
+                <span>{formatRelativeTime(note.created_at)}</span>
+                <span className="text-[10px] text-zinc-500 font-sans">(đã sửa)</span>
+              </span>
+            ) : (
+              formatRelativeTime(note.created_at)
+            )
+          )}
         </span>
 
         <div className={`flex items-center transition-opacity ${viewMode === 'list' ? 'gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100' : 'gap-1.5 md:gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}>

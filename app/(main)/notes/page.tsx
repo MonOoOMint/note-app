@@ -17,7 +17,7 @@ export default async function NotesPage({
   // Pre-fetch dữ liệu phía server để nạp ngay tức thì (0ms loading delay)
   const [groupsRes, notesRes, tagsRes, noteTagsRes] = await Promise.all([
     supabase.from('note_groups').select('*').order('order', { ascending: true }).order('created_at', { ascending: true }),
-    supabase.from('notes').select('*').order('is_pinned', { ascending: false }).order('created_at', { ascending: false }),
+    supabase.from('notes').select('*').order('is_pinned', { ascending: false }).order('updated_at', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('tags').select('*').order('name', { ascending: true }),
     supabase.from('note_tags').select('*')
   ]);

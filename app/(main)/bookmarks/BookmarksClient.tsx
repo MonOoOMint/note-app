@@ -106,7 +106,21 @@ export function BookmarksClient({
 }: BookmarksClientProps) {
   const [boards, setBoards] = useState<Board[]>(initialBoards);
   const [activeBoardId, setActiveBoardId] = useState<string | null>(initialBoards.length > 0 ? initialBoards[0].id : null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const handleCheckMobile = () => {
+      const mobile = window.innerWidth < 640;
+      setIsMobile(mobile);
+      if (window.innerWidth >= 1024) {
+        setIsSidebarOpen(true);
+      }
+    };
+    handleCheckMobile();
+    window.addEventListener('resize', handleCheckMobile);
+    return () => window.removeEventListener('resize', handleCheckMobile);
+  }, []);
 
   const [folders, setFolders] = useState<Folder[]>(initialFolders);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(initialBookmarks);
@@ -522,8 +536,9 @@ export function BookmarksClient({
     await supabase.from('bookmarks').delete().eq('id', id);
   };
 
-  // Helper phân chia các folder vào N cột thực sự
-  const numCols = columnCount === 'auto' ? 5 : (typeof columnCount === 'number' ? columnCount : 5);
+  // Helper phân chia các folder vào N cột thực sự (trên mobile luôn hiển thị 1 cột tràn viền)
+  const defaultCols = columnCount === 'auto' ? 5 : (typeof columnCount === 'number' ? columnCount : 5);
+  const numCols = isMobile ? 1 : defaultCols;
 
   const getColumnsData = (activeList: Folder[], totalCols: number): Folder[][] => {
     const cols: Folder[][] = Array.from({ length: totalCols }, () => []);
@@ -1008,19 +1023,40 @@ export function BookmarksClient({
   }
 
   return (
-    <div className="h-full flex bg-gray-50/50 dark:bg-zinc-950">
+    <div className="h-full flex bg-gray-50/50 dark:bg-zinc-950 relative overflow-hidden">
       
+      {/* Mobile Backdrop when Sidebar is Open */}
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)} 
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden animate-in fade-in duration-200"
+        />
+      )}
+
       {/* Sidebar for Boards */}
-      <aside className={`transition-all duration-300 ease-in-out border-r border-gray-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/40 flex flex-col shrink-0 ${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden border-none'}`}>
+      <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto transition-all duration-300 ease-in-out border-r border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#161b1e] flex flex-col shrink-0 shadow-2xl md:shadow-none ${
+        isSidebarOpen 
+          ? 'w-64 translate-x-0' 
+          : 'w-0 -translate-x-full md:translate-x-0 overflow-hidden border-none'
+      }`}>
         <div className="h-14 px-4 flex items-center justify-between border-b border-gray-200 dark:border-zinc-800 shrink-0">
           <span className="font-bold text-xs text-zinc-500 uppercase tracking-wider">Your Boards</span>
-          <button 
-            onClick={() => { setEditingBoard({ name: "" }); setIsBoardModalOpen(true); }} 
-            className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
-            title="Thêm Bảng mới"
-          >
-            <Plus size={15} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => { setEditingBoard({ name: "" }); setIsBoardModalOpen(true); }} 
+              className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+              title="Thêm Bảng mới"
+            >
+              <Plus size={16} />
+            </button>
+            <button 
+              onClick={() => setIsSidebarOpen(false)} 
+              className="md:hidden p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+              title="Đóng danh sách bảng"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {boards.sort((a,b) => a.order - b.order).map(board => {
@@ -1028,7 +1064,12 @@ export function BookmarksClient({
             return (
               <div 
                 key={board.id} 
-                onClick={() => handleSelectBoard(board.id)}
+                onClick={() => {
+                  handleSelectBoard(board.id);
+                  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                    setIsSidebarOpen(false);
+                  }
+                }}
                 onDragOver={(e) => {
                   if (draggedFolderId) {
                     e.preventDefault();
@@ -1043,26 +1084,26 @@ export function BookmarksClient({
                   }
                 }}
                 onDrop={(e) => handleDropFolderOnBoard(e, board.id)}
-                className={`group flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
                   isDragOver
                     ? 'bg-blue-600/30 border-2 border-blue-500 text-blue-300 scale-[1.02] shadow-md'
                     : activeBoardId === board.id 
-                      ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium' 
+                      ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold' 
                       : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
                 }`}
               >
                 <div className="flex items-center space-x-3 truncate">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDragOver ? 'bg-blue-400 animate-pulse' : activeBoardId === board.id ? 'bg-blue-500' : 'bg-zinc-500'}`} />
-                  <span className="truncate text-[13px] font-medium">{board.name}</span>
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${isDragOver ? 'bg-blue-400 animate-pulse' : activeBoardId === board.id ? 'bg-blue-500' : 'bg-zinc-500'}`} />
+                  <span className="truncate text-sm font-medium">{board.name}</span>
                 </div>
                 
                 <div className={`flex items-center shrink-0 ${activeBoardId === board.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                   <Lock size={12} className="text-zinc-500 mr-2" />
                   <button onClick={(e) => { e.stopPropagation(); setEditingBoard({ id: board.id, name: board.name }); setIsBoardModalOpen(true); }} className="p-1 hover:text-blue-500 text-zinc-400 transition-colors" title="Sửa tên bảng">
-                    <Edit2 size={13} />
+                    <Edit2 size={14} />
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); handleDeleteBoard(board.id); }} className="p-1 hover:text-red-500 text-zinc-400 transition-colors" title="Xóa bảng">
-                    <Trash2 size={13} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
@@ -1074,8 +1115,8 @@ export function BookmarksClient({
 
         {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 px-6 border-b border-gray-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-[#181d20] relative z-30 shrink-0 gap-4">
-          <div className="flex items-center gap-3 shrink-0">
+        <header className="h-14 px-3.5 sm:px-6 border-b border-gray-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-[#181d20] relative z-30 shrink-0 gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
               className={`p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${isSidebarOpen ? 'bg-zinc-200/70 dark:bg-zinc-800 text-blue-600 dark:text-blue-400' : ''}`}
@@ -1084,9 +1125,9 @@ export function BookmarksClient({
               <Menu size={18} />
             </button>
 
-            <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              {boards.find(b => b.id === activeBoardId)?.name || 'Bookmarks'}
-              {isImporting && <Loader2 size={15} className="animate-spin text-blue-500 ml-1" />}
+            <h1 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5 truncate max-w-[120px] sm:max-w-none">
+              <span className="truncate">{boards.find(b => b.id === activeBoardId)?.name || 'Bookmarks'}</span>
+              {isImporting && <Loader2 size={15} className="animate-spin text-blue-500 ml-1 shrink-0" />}
             </h1>
           </div>
 
@@ -1099,8 +1140,8 @@ export function BookmarksClient({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm kiếm theo tên hiển thị, đường dẫn URL... (Ctrl+K)"
-                className="w-full h-10 pl-10 pr-36 bg-zinc-100/90 dark:bg-[#20262b] hover:bg-zinc-200/60 dark:hover:bg-[#283036] focus:bg-white dark:focus:bg-[#151a1e] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 rounded-xl text-[13px] transition-all border border-zinc-200 dark:border-zinc-700/80 focus:border-blue-500/80 focus:ring-4 focus:ring-blue-500/15 shadow-sm outline-none"
+                placeholder={isMobile ? "Tìm bookmark... (Ctrl+K)" : "Tìm kiếm theo tên hiển thị, đường dẫn URL... (Ctrl+K)"}
+                className="w-full h-10 pl-9 sm:pl-10 pr-24 sm:pr-36 bg-zinc-100/90 dark:bg-[#20262b] hover:bg-zinc-200/60 dark:hover:bg-[#283036] focus:bg-white dark:focus:bg-[#151a1e] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 rounded-xl text-sm sm:text-[13px] transition-all border border-zinc-200 dark:border-zinc-700/80 focus:border-blue-500/80 focus:ring-4 focus:ring-blue-500/15 shadow-sm outline-none"
               />
               
               <div className="absolute right-2 flex items-center gap-1.5">
@@ -1137,7 +1178,7 @@ export function BookmarksClient({
             <input type="file" accept=".html" className="hidden" ref={fileInputRef} onChange={handleImport} />
             
             {/* Tùy chỉnh số cột hiển thị & độ dãn */}
-            <div className="relative" ref={viewSettingsRef}>
+            <div className="relative hidden sm:block" ref={viewSettingsRef}>
               <Button 
                 variant="ghost" 
                 onClick={() => setIsViewSettingsOpen(!isViewSettingsOpen)} 
@@ -1236,21 +1277,21 @@ export function BookmarksClient({
               )}
             </div>
 
-            <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={isImporting} className="text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg px-3 h-8 text-xs font-medium">
+            <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={isImporting} className="hidden md:inline-flex text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg px-3 h-8 text-xs font-medium">
               <Upload size={13} className="mr-1.5" /> Nhập
             </Button>
-            <Button variant="ghost" onClick={handleExport} className="text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg px-3 h-8 text-xs font-medium">
+            <Button variant="ghost" onClick={handleExport} className="hidden md:inline-flex text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg px-3 h-8 text-xs font-medium">
               <Download size={13} className="mr-1.5" /> Xuất
             </Button>
             
-            <Button onClick={() => { setEditingFolder({ board_id: activeBoardId || '', name: "", color: "blue" }); setIsFolderModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 rounded-lg px-3.5 h-8 text-xs font-medium ml-1">
-              <Plus size={14} className="mr-1.5" /> Thêm Cột
+            <Button onClick={() => { setEditingFolder({ board_id: activeBoardId || '', name: "", color: "blue" }); setIsFolderModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 rounded-lg px-2.5 sm:px-3.5 h-8 text-xs font-medium shrink-0 flex items-center gap-1">
+              <Plus size={14} /> <span className="hidden sm:inline">Thêm Cột</span>
             </Button>
           </div>
         </header>
 
         {/* Boards Area (Papaly Multi-column Grid) */}
-        <div className="flex-1 overflow-y-auto p-6 bg-[#1e2327] dark:bg-[#1e2327]">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-[#1e2327] dark:bg-[#1e2327]">
           {isSearching && displayFolders.length === 0 ? (
             /* Không tìm thấy kết quả tìm kiếm */
             <div className="flex flex-col items-center justify-center p-16 text-zinc-400">
@@ -1371,28 +1412,28 @@ export function BookmarksClient({
                               <div className="flex items-center min-w-0 pr-1">
                                 {!isSearching && <GripVertical size={14} className="text-zinc-600 group-hover:text-zinc-400 shrink-0 mr-1" />}
                                 <div className={`w-1 h-4 rounded-full mr-2 shrink-0 ${colorObj.class}`} />
-                                <h3 className="font-bold text-[14px] text-zinc-100 truncate">{folder.name}</h3>
+                                <h3 className="font-bold text-base sm:text-sm text-zinc-100 truncate">{folder.name}</h3>
                                 {isSearching && searchScope === 'all' && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-normal ml-2 shrink-0 border border-zinc-700/50" title="Thuộc Bảng">
                                     {boards.find(b => b.id === folder.board_id)?.name || 'Bảng khác'}
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                <button onClick={(e) => { e.stopPropagation(); setEditingFolder({ id: folder.id, board_id: folder.board_id || activeBoardId || '', name: folder.name, color: folder.color || 'blue' }); setIsFolderModalOpen(true); }} className="p-1 text-zinc-500 hover:text-blue-400 transition-colors" title="Sửa cột & chuyển bảng">
-                                  <Edit2 size={13} />
+                              <div className="flex items-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                                <button onClick={(e) => { e.stopPropagation(); setEditingFolder({ id: folder.id, board_id: folder.board_id || activeBoardId || '', name: folder.name, color: folder.color || 'blue' }); setIsFolderModalOpen(true); }} className="p-1.5 sm:p-1 text-zinc-400 hover:text-blue-400 transition-colors" title="Sửa cột & chuyển bảng">
+                                  <Edit2 size={14} />
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }} className="p-1 text-zinc-500 hover:text-red-400 transition-colors" title="Xóa cột">
-                                  <Trash2 size={13} />
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }} className="p-1.5 sm:p-1 text-zinc-400 hover:text-red-400 transition-colors" title="Xóa cột">
+                                  <Trash2 size={14} />
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); setEditingBookmark({ folder_id: folder.id, url: "" }); setIsBookmarkModalOpen(true); }} className="p-1 text-zinc-500 hover:text-green-400 transition-colors ml-1" title="Thêm bookmark">
-                                  <Plus size={14} />
+                                <button onClick={(e) => { e.stopPropagation(); setEditingBookmark({ folder_id: folder.id, url: "" }); setIsBookmarkModalOpen(true); }} className="p-1.5 sm:p-1 text-zinc-400 hover:text-green-400 transition-colors ml-0.5" title="Thêm bookmark">
+                                  <Plus size={15} />
                                 </button>
                               </div>
                             </div>
 
                             {/* Danh sách bookmarks bên trong nhóm */}
-                            <div className="flex flex-col space-y-0.5 min-h-[30px]">
+                            <div className="flex flex-col space-y-1 sm:space-y-0.5 min-h-[30px]">
                               {folderBookmarks.map(bm => {
                                 const faviconSrc = getEffectiveFavicon(bm.url, bm.favicon_url);
                                 return (
@@ -1406,14 +1447,14 @@ export function BookmarksClient({
                                     onDragEnd={handleDragEnd}
                                     onDragOver={(e) => !isSearching && handleDragOverBookmark(e, bm.id)}
                                     onDrop={(e) => !isSearching && handleDropBookmark(e, folder.id, bm.id)}
-                                    className={`group flex items-center py-1.5 px-2 rounded hover:bg-white/5 transition-colors relative cursor-pointer ${dragOverBookmarkId === bm.id ? 'border-t-2 border-blue-500' : 'border-t-2 border-transparent'} ${draggedBookmarkId === bm.id ? 'opacity-50' : ''}`}
+                                    className={`group flex items-center py-2 sm:py-1.5 px-2.5 sm:px-2 rounded-xl sm:rounded hover:bg-white/5 transition-colors relative cursor-pointer ${dragOverBookmarkId === bm.id ? 'border-t-2 border-blue-500' : 'border-t-2 border-transparent'} ${draggedBookmarkId === bm.id ? 'opacity-50' : ''}`}
                                   >
-                                    <div className="w-4 h-4 flex items-center justify-center shrink-0 mr-2.5 opacity-90 group-hover:opacity-100 mt-0.5 self-start">
+                                    <div className="w-5 h-5 sm:w-4 sm:h-4 flex items-center justify-center shrink-0 mr-3 sm:mr-2.5 opacity-95 group-hover:opacity-100 mt-0.5 self-center sm:self-start">
                                       {faviconSrc ? (
                                         <img 
                                           src={faviconSrc} 
                                           alt="" 
-                                          className="w-4 h-4 object-contain rounded-[2px]" 
+                                          className="w-5 h-5 sm:w-4 sm:h-4 object-contain rounded-[3px]" 
                                           onError={(e) => { 
                                             const domain = getDomain(bm.url);
                                             if (!e.currentTarget.src.includes('duckduckgo')) {
@@ -1424,18 +1465,18 @@ export function BookmarksClient({
                                           }} 
                                         />
                                       ) : (
-                                        <Link2 size={14} className="text-zinc-500" />
+                                        <Link2 size={16} className="text-zinc-500" />
                                       )}
                                     </div>
                                     <div className="flex-1 min-w-0 pr-12">
-                                      <HighlightText text={bm.title} query={searchQuery} className="text-[13px] text-zinc-300 group-hover:text-zinc-100 transition-colors truncate block font-medium" />
+                                      <HighlightText text={bm.title} query={searchQuery} className="text-[15px] sm:text-[13px] text-zinc-100 group-hover:text-blue-400 transition-colors truncate block font-semibold sm:font-medium tracking-tight" />
                                       {isSearching && (
-                                        <HighlightText text={bm.url} query={searchQuery} className="text-[11px] text-zinc-500 group-hover:text-zinc-400 truncate block mt-0.5 font-mono" />
+                                        <HighlightText text={bm.url} query={searchQuery} className="text-xs sm:text-[11px] text-zinc-400 group-hover:text-zinc-300 truncate block mt-0.5 font-mono" />
                                       )}
                                     </div>
 
-                                    {/* Action buttons (Edit & Delete on hover) */}
-                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity bg-[#252b30]/95 px-1 py-0.5 rounded shadow-sm">
+                                    {/* Action buttons (Edit & Delete on hover / visible on mobile) */}
+                                    <div className="absolute right-1.5 sm:right-1 top-1/2 -translate-y-1/2 flex items-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-[#252b30]/90 sm:bg-[#252b30]/95 px-1.5 sm:px-1 py-1 sm:py-0.5 rounded-lg sm:rounded shadow-sm">
                                       <button 
                                         onClick={(e) => { 
                                           e.preventDefault(); 
@@ -1444,7 +1485,7 @@ export function BookmarksClient({
                                             id: bm.id, 
                                             folder_id: bm.folder_id, 
                                             url: bm.url, 
-                                            title: bm.title,
+                                            title: bm.title, 
                                             favicon_url: bm.favicon_url 
                                           }); 
                                           setIsBookmarkModalOpen(true); 
@@ -1452,25 +1493,25 @@ export function BookmarksClient({
                                         className="p-1 text-zinc-400 hover:text-blue-400 transition-colors" 
                                         title="Sửa link"
                                       >
-                                        <Edit2 size={12} />
+                                        <Edit2 size={13} />
                                       </button>
                                       <button 
                                         onClick={(e) => { 
                                           e.preventDefault(); 
                                           e.stopPropagation(); 
-                                          setConfirmConfig({
-                                            isOpen: true,
-                                            title: "Xoá Bookmark",
-                                            message: `Bạn có chắc muốn xoá bookmark "${bm.title || bm.url}"?`,
-                                            confirmText: "Xoá Link",
-                                            variant: "danger",
-                                            onConfirm: () => handleDeleteBookmark(bm.id)
-                                          });
+                                          setConfirmConfig({ 
+                                            isOpen: true, 
+                                            title: "Xoá Bookmark", 
+                                            message: `Bạn có chắc muốn xoá bookmark "${bm.title || bm.url}"?`, 
+                                            confirmText: "Xoá Link", 
+                                            variant: "danger", 
+                                            onConfirm: () => handleDeleteBookmark(bm.id) 
+                                          }); 
                                         }} 
                                         className="p-1 text-zinc-400 hover:text-red-400 transition-colors ml-0.5" 
                                         title="Xoá link"
                                       >
-                                        <Trash2 size={12} />
+                                        <Trash2 size={13} />
                                       </button>
                                     </div>
                                   </a>
@@ -1478,7 +1519,7 @@ export function BookmarksClient({
                               })}
 
                               {folderBookmarks.length === 0 && (
-                                <div className="py-2 px-2 text-zinc-600 text-[13px]">Trống</div>
+                                <div className="py-3 px-2.5 text-zinc-500 text-sm">Chưa có bookmark</div>
                               )}
                             </div>
                           </div>
