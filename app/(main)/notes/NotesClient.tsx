@@ -33,7 +33,8 @@ import {
   Loader2,
   Image as ImageIcon,
   Eye,
-  PenLine
+  PenLine,
+  GripVertical
 } from "lucide-react";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
@@ -95,6 +96,7 @@ export interface NoteTag {
 }
 
 export type NoteSortOption = 'created_desc' | 'updated_desc' | 'created_asc' | 'updated_asc';
+export type ViewMode = 'grid' | 'list' | 'accordion';
 
 export const SORT_OPTIONS: { id: NoteSortOption; label: string; shortLabel: string; desc: string }[] = [
   {
@@ -632,7 +634,7 @@ export function NotesClient({
   // Filter state
   const [selectedFilter, setSelectedFilter] = useState<string>('all'); // 'all' | 'pinned' | 'images' | `group:${groupId}` | `tag:${tagId}`
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortBy, setSortBy] = useState<NoteSortOption>('updated_desc');
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
@@ -737,8 +739,8 @@ export function NotesClient({
   // Load user preferences from LocalStorage
   useEffect(() => {
     try {
-      const savedView = localStorage.getItem('notes_view_mode');
-      if (savedView === 'grid' || savedView === 'list') {
+      const savedView = localStorage.getItem('notes_view_mode') as ViewMode | null;
+      if (savedView === 'grid' || savedView === 'list' || savedView === 'accordion') {
         setViewMode(savedView);
       }
       const savedSort = localStorage.getItem('notes_sort_order') as NoteSortOption;
@@ -766,7 +768,7 @@ export function NotesClient({
     }
   }, [isSharedSuccess]);
 
-  const changeViewMode = (mode: 'grid' | 'list') => {
+  const changeViewMode = (mode: ViewMode) => {
     setViewMode(mode);
     try { localStorage.setItem('notes_view_mode', mode); } catch {}
   };
@@ -1454,15 +1456,16 @@ export function NotesClient({
   // Helper render danh sách thẻ ghi chú
   const renderNotesGrid = (notesToRender: Note[], extraClass: string = "") => {
     if (notesToRender.length === 0) return null;
+    const isGrid = viewMode !== 'list';
     return (
-      <div className={`${viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" : "space-y-3"} ${extraClass}`}>
+      <div className={`${isGrid ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start" : "space-y-3"} ${extraClass}`}>
         {notesToRender.map(note => (
           <NoteCardItem
             key={note.id}
             note={note}
             groups={groups}
             copiedId={copiedId}
-            viewMode={viewMode}
+            viewMode={viewMode === 'list' ? 'list' : 'grid'}
             sortBy={sortBy}
             onOpenEdit={handleOpenEdit}
             onTogglePin={handleTogglePin}
@@ -1591,7 +1594,7 @@ export function NotesClient({
                                 {...listeners} 
                                 className="text-zinc-600 lg:opacity-0 group-hover:opacity-100 cursor-grab shrink-0 transition-opacity p-1 -ml-1 rounded hover:bg-zinc-800 touch-none"
                               >
-                                <LayoutGrid size={12} className="pointer-events-none" />
+                                <GripVertical size={13} className="pointer-events-none" />
                               </div>
                               <Folder size={14} className={isSelected ? 'text-blue-400' : 'text-zinc-500'} />
                               <span className="truncate">{group.name}</span>
@@ -1779,6 +1782,13 @@ export function NotesClient({
                 title="Chế độ Danh sách (List)"
               >
                 <List size={17} />
+              </button>
+              <button
+                onClick={() => changeViewMode('accordion')}
+                className={`p-1.5 sm:p-2 rounded-lg transition-colors ${viewMode === 'accordion' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
+                title="Chế độ Gom theo nhóm (Accordion)"
+              >
+                <Folder size={17} />
               </button>
             </div>
           </div>
@@ -2033,9 +2043,9 @@ export function NotesClient({
             )}
           </div>
 
-          {selectedFilter === 'all' && !isSearching ? (
+          {selectedFilter === 'all' && !isSearching && viewMode === 'accordion' ? (
             /* ========================================================
-               CHẾ ĐỘ ACCORDION (KHI XEM TẤT CẢ VÀ KHÔNG TÌM KIẾM)
+               CHẾ ĐỘ ACCORDION (KHI XEM GOM THEO NHÓM)
                ======================================================== */
             <div className="space-y-4 pb-10">
               
@@ -2085,7 +2095,7 @@ export function NotesClient({
                                   title="Kéo để sắp xếp"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <LayoutGrid size={16} className="pointer-events-none" />
+                                  <GripVertical size={16} className="pointer-events-none" />
                                 </div>
                                 <button className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 p-1">
                                   {isAccordionOpen(group.id) ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
@@ -2200,7 +2210,7 @@ export function NotesClient({
               <div className="space-y-3">
                 {pinnedNotes.length > 0 && otherNotes.length > 0 && (
                   <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    {isSearching ? `Kết quả khác (${otherNotes.length})` : "Khác"}
+                    {isSearching ? `Kết quả khác (${otherNotes.length})` : `Ghi chú (${otherNotes.length})`}
                   </div>
                 )}
 
