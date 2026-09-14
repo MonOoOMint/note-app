@@ -34,7 +34,9 @@ import {
   Image as ImageIcon,
   Eye,
   PenLine,
-  GripVertical
+  GripVertical,
+  Layers,
+  Clock
 } from "lucide-react";
 import { AutocompleteSearchBox } from "@/components/ui/AutocompleteSearchBox";
 import { SortableNoteGroupWrapper } from "@/components/notes/SortableNoteGroupWrapper";
@@ -124,6 +126,77 @@ export const SORT_OPTIONS: { id: NoteSortOption; label: string; shortLabel: stri
     desc: 'Ghi chú ít chỉnh sửa nhất sẽ hiển thị trước'
   }
 ];
+
+export type NoteGroupBy = 'group' | 'date' | 'none';
+
+export const GROUP_BY_OPTIONS: { id: NoteGroupBy; label: string; shortLabel: string; desc: string }[] = [
+  {
+    id: 'group',
+    label: 'Theo Nhóm chủ đề',
+    shortLabel: 'Gom theo nhóm',
+    desc: 'Phân chia thành từng khu vực theo nhóm ghi chú (mặc định)'
+  },
+  {
+    id: 'date',
+    label: 'Theo Mốc thời gian',
+    shortLabel: 'Theo thời gian',
+    desc: 'Phân chia theo Hôm nay, Hôm qua, 7 ngày qua, Cũ hơn'
+  },
+  {
+    id: 'none',
+    label: 'Không gom nhóm',
+    shortLabel: 'Dạng phẳng',
+    desc: 'Hiển thị tất cả ghi chú trong một lưới phẳng liền mạch'
+  }
+];
+
+export type DateBucketKey = 'today' | 'yesterday' | 'last7days' | 'thisMonth' | 'lastMonth' | 'older';
+
+export const DATE_BUCKETS: { key: DateBucketKey; label: string }[] = [
+  { key: 'today', label: 'Hôm nay' },
+  { key: 'yesterday', label: 'Hôm qua' },
+  { key: 'last7days', label: '7 ngày qua' },
+  { key: 'thisMonth', label: 'Tháng này' },
+  { key: 'lastMonth', label: 'Tháng trước' },
+  { key: 'older', label: 'Cũ hơn' },
+];
+
+export function getDateBucketKey(dateStr: string): DateBucketKey {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    
+    // So sánh ngày theo lịch địa phương
+    const isToday = d.getFullYear() === now.getFullYear() &&
+                    d.getMonth() === now.getMonth() &&
+                    d.getDate() === now.getDate();
+    if (isToday) return 'today';
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.getFullYear() === yesterday.getFullYear() &&
+                        d.getMonth() === yesterday.getMonth() &&
+                        d.getDate() === yesterday.getDate();
+    if (isYesterday) return 'yesterday';
+
+    const diffTime = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays < 7 && diffDays >= 0) return 'last7days';
+
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
+      return 'thisMonth';
+    }
+
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    if (d.getFullYear() === lastMonthDate.getFullYear() && d.getMonth() === lastMonthDate.getMonth()) {
+      return 'lastMonth';
+    }
+
+    return 'older';
+  } catch {
+    return 'older';
+  }
+}
 
 export function compareNotes(a: Note, b: Note, sort: NoteSortOption): number {
   if (sort === 'created_desc') {
@@ -638,7 +711,17 @@ export function NotesClient({
   const [sortBy, setSortBy] = useState<NoteSortOption>('updated_desc');
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const [groupBy, setGroupBy] = useState<NoteGroupBy>('group');
+  const [isGroupByDropdownOpen, setIsGroupByDropdownOpen] = useState(false);
+  const groupByDropdownRef = useRef<HTMLDivElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Section Collapse State trong chế độ Lưới/Danh sách
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (id: string) => {
+    setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+  const isSectionCollapsed = (id: string) => Boolean(collapsedSections[id]);
 
   // Accordion State
   const [expandedAccordions, setExpandedAccordions] = useState<Record<string, boolean>>({});
@@ -749,6 +832,12 @@ export function NotesClient({
       } else {
         setSortBy('updated_desc');
       }
+      const savedGroupBy = localStorage.getItem('notes_group_by') as NoteGroupBy | null;
+      if (savedGroupBy && ['group', 'date', 'none'].includes(savedGroupBy)) {
+        setGroupBy(savedGroupBy);
+      } else {
+        setGroupBy('group');
+      }
     } catch {}
   }, []);
 
@@ -778,7 +867,12 @@ export function NotesClient({
     try { localStorage.setItem('notes_sort_order', sort); } catch {}
   };
 
-  // Close composer / sort dropdown when clicking outside
+  const changeGroupBy = (mode: NoteGroupBy) => {
+    setGroupBy(mode);
+    try { localStorage.setItem('notes_group_by', mode); } catch {}
+  };
+
+  // Close composer / sort dropdown / groupBy dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (composerRef.current && !composerRef.current.contains(e.target as Node)) {
@@ -788,6 +882,9 @@ export function NotesClient({
       }
       if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
         setIsSortDropdownOpen(false);
+      }
+      if (groupByDropdownRef.current && !groupByDropdownRef.current.contains(e.target as Node)) {
+        setIsGroupByDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -1453,6 +1550,80 @@ export function NotesClient({
     return { groupedNotesMap: map, ungroupedNotes: ungrouped };
   }, [otherNotes]);
 
+  // Danh sách các nhóm có ghi chú, sắp xếp thông minh theo độ mới nhất (hoặc thứ tự sidebar)
+  const activeSortedGroups = React.useMemo(() => {
+    const groupIdsWithNotes = new Set(groupedNotesMap.keys());
+    const active = groups.filter(g => groupIdsWithNotes.has(g.id));
+
+    if (sortBy === 'updated_desc' || sortBy === 'created_desc') {
+      return [...active].sort((a, b) => {
+        const notesA = groupedNotesMap.get(a.id) || [];
+        const notesB = groupedNotesMap.get(b.id) || [];
+        if (notesA.length === 0) return 1;
+        if (notesB.length === 0) return -1;
+        // Ghi chú đầu tiên luôn là ghi chú mới nhất vì otherNotes đã được sort theo sortBy
+        return compareNotes(notesA[0], notesB[0], sortBy);
+      });
+    }
+
+    return [...active].sort((a, b) => a.order - b.order);
+  }, [groups, groupedNotesMap, sortBy]);
+
+  // Gom ghi chú theo mốc thời gian (Timeline)
+  const dateGroupedNotes = React.useMemo(() => {
+    const buckets: Record<DateBucketKey, Note[]> = {
+      today: [],
+      yesterday: [],
+      last7days: [],
+      thisMonth: [],
+      lastMonth: [],
+      older: []
+    };
+
+    otherNotes.forEach(note => {
+      const dateToUse = sortBy.startsWith('created') ? note.created_at : (note.updated_at || note.created_at);
+      const key = getDateBucketKey(dateToUse);
+      buckets[key].push(note);
+    });
+
+    return buckets;
+  }, [otherNotes, sortBy]);
+
+  // Tổng số section đang hiển thị và danh sách ID của các section
+  const allVisibleSectionIds = React.useMemo(() => {
+    if (selectedFilter.startsWith('group:')) return [];
+    if (groupBy === 'group') {
+      const ids = activeSortedGroups.map(g => `group-${g.id}`);
+      if (ungroupedNotes.length > 0) ids.push('group-ungrouped');
+      return ids;
+    }
+    if (groupBy === 'date') {
+      return DATE_BUCKETS.filter(b => dateGroupedNotes[b.key].length > 0).map(b => `date-${b.key}`);
+    }
+    return [];
+  }, [groupBy, selectedFilter, activeSortedGroups, ungroupedNotes, dateGroupedNotes]);
+
+  const visibleSectionsCount = allVisibleSectionIds.length;
+
+  const areAllSectionsCollapsed = React.useMemo(() => {
+    if (allVisibleSectionIds.length <= 1) return false;
+    return allVisibleSectionIds.every(id => Boolean(collapsedSections[id]));
+  }, [allVisibleSectionIds, collapsedSections]);
+
+  const toggleAllSections = () => {
+    if (areAllSectionsCollapsed) {
+      // Mở tất cả
+      setCollapsedSections({});
+    } else {
+      // Thu gọn tất cả
+      const newMap: Record<string, boolean> = {};
+      allVisibleSectionIds.forEach(id => {
+        newMap[id] = true;
+      });
+      setCollapsedSections(newMap);
+    }
+  };
+
   // Helper render danh sách thẻ ghi chú
   const renderNotesGrid = (notesToRender: Note[], extraClass: string = "") => {
     if (notesToRender.length === 0) return null;
@@ -1767,6 +1938,68 @@ export function NotesClient({
                 </div>
               )}
             </div>
+
+            {/* Bộ chọn Gom nhóm (Group By Dropdown) - Hiển thị trong Grid & List */}
+            {viewMode !== 'accordion' && (
+              <div className="relative" ref={groupByDropdownRef}>
+                <button
+                  onClick={() => setIsGroupByDropdownOpen(!isGroupByDropdownOpen)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium border transition-all ${
+                    groupBy !== 'none'
+                      ? 'bg-blue-600/20 text-blue-400 border-blue-500/40' 
+                      : 'bg-[#20262b] text-zinc-300 hover:text-white border-zinc-700/80 hover:border-zinc-600'
+                  }`}
+                  title="Phân chia / Gom nhóm hiển thị"
+                >
+                  <Layers size={15} className="text-blue-400 shrink-0" />
+                  <span className="hidden sm:inline">
+                    {GROUP_BY_OPTIONS.find(o => o.id === groupBy)?.shortLabel || 'Gom nhóm'}
+                  </span>
+                  <ChevronDown size={13} className={`transition-transform duration-200 text-zinc-400 ${isGroupByDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isGroupByDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-60 bg-[#181d20] border border-zinc-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
+                    <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-800 flex items-center justify-between">
+                      <span>Phân nhóm hiển thị</span>
+                      <Layers size={12} className="text-blue-400" />
+                    </div>
+                    <div className="py-1 space-y-0.5">
+                      {GROUP_BY_OPTIONS.map((opt) => {
+                        const isSelected = groupBy === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => {
+                              changeGroupBy(opt.id);
+                              setIsGroupByDropdownOpen(false);
+                            }}
+                            className={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between text-left transition-colors ${
+                              isSelected
+                                ? 'bg-blue-600/20 text-blue-300 font-semibold'
+                                : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex flex-col gap-0.5">
+                              <span className="flex items-center gap-1.5 font-medium">
+                                {opt.id === 'group' && <Folder size={13} className="text-blue-400 shrink-0" />}
+                                {opt.id === 'date' && <Clock size={13} className="text-blue-400 shrink-0" />}
+                                {opt.id === 'none' && <LayoutGrid size={13} className="text-zinc-400 shrink-0" />}
+                                {opt.label}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 line-clamp-1">
+                                {opt.desc}
+                              </span>
+                            </div>
+                            {isSelected && <Check size={14} className="text-blue-400 shrink-0 ml-2" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-1 bg-[#20262b] p-1 rounded-xl border border-zinc-700/80">
               <button
@@ -2207,10 +2440,34 @@ export function NotesClient({
               )}
 
               {/* DANH SÁCH GHI CHÚ KHÁC */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {pinnedNotes.length > 0 && otherNotes.length > 0 && (
-                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    {isSearching ? `Kết quả khác (${otherNotes.length})` : `Ghi chú (${otherNotes.length})`}
+                  <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wider pb-1">
+                    <span>{isSearching ? `Kết quả khác (${otherNotes.length})` : `Ghi chú (${otherNotes.length})`}</span>
+                    {visibleSectionsCount > 1 && (
+                      <button
+                        onClick={toggleAllSections}
+                        className="text-[11px] font-normal normal-case text-zinc-400 hover:text-blue-400 flex items-center gap-1 transition-colors px-2 py-0.5 rounded-lg hover:bg-zinc-800/80"
+                      >
+                        {areAllSectionsCollapsed ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        <span>{areAllSectionsCollapsed ? 'Mở tất cả nhóm' : 'Thu gọn tất cả'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {pinnedNotes.length === 0 && otherNotes.length > 0 && visibleSectionsCount > 1 && (
+                  <div className="flex items-center justify-between text-xs text-zinc-500 pb-1">
+                    <span className="font-semibold text-zinc-400">
+                      {isSearching ? `Tìm thấy ${otherNotes.length} ghi chú` : `Tổng cộng ${otherNotes.length} ghi chú`}
+                    </span>
+                    <button
+                      onClick={toggleAllSections}
+                      className="text-[11px] text-zinc-400 hover:text-blue-400 flex items-center gap-1 transition-colors px-2 py-0.5 rounded-lg hover:bg-zinc-800/80"
+                    >
+                      {areAllSectionsCollapsed ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      <span>{areAllSectionsCollapsed ? 'Mở tất cả nhóm' : 'Thu gọn tất cả'}</span>
+                    </button>
                   </div>
                 )}
 
@@ -2236,7 +2493,144 @@ export function NotesClient({
                     )}
                   </div>
                 ) : (
-                  renderNotesGrid(otherNotes)
+                  <>
+                    {/* Trường hợp 1: Phân nhóm theo Nhóm chủ đề (Folder/Topic) */}
+                    {groupBy === 'group' && !selectedFilter.startsWith('group:') ? (
+                      <div className="space-y-6">
+                        {/* Render từng nhóm có ghi chú */}
+                        {activeSortedGroups.map(group => {
+                          const groupNotes = groupedNotesMap.get(group.id) || [];
+                          const secId = `group-${group.id}`;
+                          const isCollapsed = isSectionCollapsed(secId);
+                          return (
+                            <div key={group.id} className="space-y-3">
+                              {/* Header nhóm */}
+                              <div
+                                onClick={() => toggleSection(secId)}
+                                className="flex items-center justify-between py-2 px-1 border-b border-zinc-800/80 cursor-pointer group/sec select-none transition-colors hover:border-zinc-700"
+                              >
+                                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                                  <button
+                                    type="button"
+                                    className="text-zinc-500 group-hover/sec:text-zinc-300 transition-colors p-0.5 rounded"
+                                    title={isCollapsed ? "Mở rộng nhóm" : "Thu gọn nhóm"}
+                                  >
+                                    {isCollapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
+                                  </button>
+                                  <Folder size={17} className="text-blue-400 shrink-0" />
+                                  <h3 className="font-bold text-sm sm:text-base text-zinc-100 group-hover/sec:text-white transition-colors truncate">
+                                    {group.name}
+                                  </h3>
+                                  <span className="text-xs text-zinc-400 font-mono bg-zinc-800/90 px-2.5 py-0.5 rounded-full border border-zinc-700/50 shrink-0">
+                                    {groupNotes.length}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => handleQuickAddNote(group.id)}
+                                    className="text-xs text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium border border-transparent hover:border-blue-500/20"
+                                    title={`Thêm ghi chú vào ${group.name}`}
+                                  >
+                                    <Plus size={14} />
+                                    <span className="hidden sm:inline">Thêm vào nhóm</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Lưới ghi chú của nhóm */}
+                              {!isCollapsed && renderNotesGrid(groupNotes)}
+                            </div>
+                          );
+                        })}
+
+                        {/* Render phần ghi chú chưa phân nhóm */}
+                        {ungroupedNotes.length > 0 && (
+                          <div key="ungrouped" className="space-y-3 pt-1">
+                            <div
+                              onClick={() => toggleSection('group-ungrouped')}
+                              className="flex items-center justify-between py-2 px-1 border-b border-zinc-800/80 cursor-pointer group/sec select-none transition-colors hover:border-zinc-700"
+                            >
+                              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                                <button
+                                  type="button"
+                                  className="text-zinc-500 group-hover/sec:text-zinc-300 transition-colors p-0.5 rounded"
+                                  title={isSectionCollapsed('group-ungrouped') ? "Mở rộng" : "Thu gọn"}
+                                >
+                                  {isSectionCollapsed('group-ungrouped') ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
+                                </button>
+                                <FileText size={17} className="text-zinc-400 shrink-0" />
+                                <h3 className="font-bold text-sm sm:text-base text-zinc-300 group-hover/sec:text-white transition-colors truncate">
+                                  Chưa phân nhóm
+                                </h3>
+                                <span className="text-xs text-zinc-400 font-mono bg-zinc-800/90 px-2.5 py-0.5 rounded-full border border-zinc-700/50 shrink-0">
+                                  {ungroupedNotes.length}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => handleQuickAddNote("")}
+                                  className="text-xs text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium border border-transparent hover:border-blue-500/20"
+                                  title="Thêm ghi chú chưa phân nhóm"
+                                >
+                                  <Plus size={14} />
+                                  <span className="hidden sm:inline">Thêm ghi chú</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {!isSectionCollapsed('group-ungrouped') && renderNotesGrid(ungroupedNotes)}
+                          </div>
+                        )}
+
+                        {/* Nếu không có nhóm nào và cũng không có ungroupedNotes (trường hợp hiếm) */}
+                        {activeSortedGroups.length === 0 && ungroupedNotes.length === 0 && (
+                          renderNotesGrid(otherNotes)
+                        )}
+                      </div>
+                    ) : groupBy === 'date' ? (
+                      /* Trường hợp 2: Phân nhóm theo Mốc thời gian (Timeline) */
+                      <div className="space-y-6">
+                        {DATE_BUCKETS.map(bucket => {
+                          const bNotes = dateGroupedNotes[bucket.key];
+                          if (bNotes.length === 0) return null;
+                          const secId = `date-${bucket.key}`;
+                          const isCollapsed = isSectionCollapsed(secId);
+                          return (
+                            <div key={bucket.key} className="space-y-3">
+                              <div
+                                onClick={() => toggleSection(secId)}
+                                className="flex items-center justify-between py-2 px-1 border-b border-zinc-800/80 cursor-pointer group/sec select-none transition-colors hover:border-zinc-700"
+                              >
+                                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                                  <button
+                                    type="button"
+                                    className="text-zinc-500 group-hover/sec:text-zinc-300 transition-colors p-0.5 rounded"
+                                    title={isCollapsed ? "Mở rộng" : "Thu gọn"}
+                                  >
+                                    {isCollapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
+                                  </button>
+                                  <Clock size={16} className="text-blue-400 shrink-0" />
+                                  <h3 className="font-bold text-sm sm:text-base text-zinc-200 group-hover/sec:text-white transition-colors truncate">
+                                    {bucket.label}
+                                  </h3>
+                                  <span className="text-xs text-zinc-400 font-mono bg-zinc-800/90 px-2.5 py-0.5 rounded-full border border-zinc-700/50 shrink-0">
+                                    {bNotes.length}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {!isCollapsed && renderNotesGrid(bNotes)}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* Trường hợp 3: Dạng phẳng (Không gom nhóm) hoặc Đang lọc riêng 1 nhóm */
+                      renderNotesGrid(otherNotes)
+                    )}
+                  </>
                 )}
               </div>
             </div>
