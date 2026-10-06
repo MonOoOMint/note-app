@@ -714,14 +714,14 @@ export function NotesClient({
   const [groupBy, setGroupBy] = useState<NoteGroupBy>('group');
   const [isGroupByDropdownOpen, setIsGroupByDropdownOpen] = useState(false);
   const groupByDropdownRef = useRef<HTMLDivElement>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Section Collapse State trong chế độ Lưới/Danh sách
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  // Section Collapse State trong chế độ Lưới/Danh sách (Mặc định thu gọn tất cả các nhóm)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const toggleSection = (id: string) => {
-    setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));
   };
-  const isSectionCollapsed = (id: string) => Boolean(collapsedSections[id]);
+  const isSectionCollapsed = (id: string) => !expandedSections[id];
 
   // Accordion State
   const [expandedAccordions, setExpandedAccordions] = useState<Record<string, boolean>>({});
@@ -838,6 +838,12 @@ export function NotesClient({
       } else {
         setGroupBy('group');
       }
+      const savedSidebar = localStorage.getItem('notes_sidebar_open');
+      if (savedSidebar !== null) {
+        setIsSidebarOpen(savedSidebar === 'true');
+      } else {
+        setIsSidebarOpen(true);
+      }
     } catch {}
   }, []);
 
@@ -870,6 +876,14 @@ export function NotesClient({
   const changeGroupBy = (mode: NoteGroupBy) => {
     setGroupBy(mode);
     try { localStorage.setItem('notes_group_by', mode); } catch {}
+  };
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(prev => {
+      const next = !prev;
+      try { localStorage.setItem('notes_sidebar_open', String(next)); } catch {}
+      return next;
+    });
   };
 
   // Close composer / sort dropdown / groupBy dropdown when clicking outside
@@ -1607,20 +1621,20 @@ export function NotesClient({
 
   const areAllSectionsCollapsed = React.useMemo(() => {
     if (allVisibleSectionIds.length <= 1) return false;
-    return allVisibleSectionIds.every(id => Boolean(collapsedSections[id]));
-  }, [allVisibleSectionIds, collapsedSections]);
+    return allVisibleSectionIds.every(id => !expandedSections[id]);
+  }, [allVisibleSectionIds, expandedSections]);
 
   const toggleAllSections = () => {
     if (areAllSectionsCollapsed) {
       // Mở tất cả
-      setCollapsedSections({});
-    } else {
-      // Thu gọn tất cả
       const newMap: Record<string, boolean> = {};
       allVisibleSectionIds.forEach(id => {
         newMap[id] = true;
       });
-      setCollapsedSections(newMap);
+      setExpandedSections(newMap);
+    } else {
+      // Thu gọn tất cả
+      setExpandedSections({});
     }
   };
 
@@ -1688,7 +1702,7 @@ export function NotesClient({
           {/* Bộ lọc chính */}
           <div className="space-y-1">
             <button
-              onClick={() => { setSelectedFilter('all'); setIsSidebarOpen(false); }}
+              onClick={() => { setSelectedFilter('all'); }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 selectedFilter === 'all' 
                   ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' 
@@ -1702,7 +1716,7 @@ export function NotesClient({
             </button>
 
             <button
-              onClick={() => { setSelectedFilter('pinned'); setIsSidebarOpen(false); }}
+              onClick={() => { setSelectedFilter('pinned'); }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 selectedFilter === 'pinned' 
                   ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30' 
@@ -1716,7 +1730,7 @@ export function NotesClient({
             </button>
 
             <button
-              onClick={() => { setSelectedFilter('images'); setIsSidebarOpen(false); }}
+              onClick={() => { setSelectedFilter('images'); }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 selectedFilter === 'images' 
                   ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' 
@@ -1752,7 +1766,7 @@ export function NotesClient({
                           <div
                             ref={setNodeRef}
                             style={style}
-                            onClick={() => { setSelectedFilter(`group:${group.id}`); setIsSidebarOpen(false); }}
+                            onClick={() => { setSelectedFilter(`group:${group.id}`); }}
                             className={`group flex items-center justify-between px-3 py-2 rounded-xl text-sm cursor-pointer transition-all ${
                               isSelected
                               ? 'bg-blue-600/20 text-blue-400 font-medium border border-blue-500/30'
@@ -1795,7 +1809,7 @@ export function NotesClient({
                   return (
                     <button
                       key={tag.id}
-                      onClick={() => { setSelectedFilter(isSelected ? 'all' : `tag:${tag.id}`); setIsSidebarOpen(false); }}
+                      onClick={() => { setSelectedFilter(isSelected ? 'all' : `tag:${tag.id}`); }}
                       className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 ${
                         isSelected
                           ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-semibold shadow-sm'
@@ -1821,7 +1835,7 @@ export function NotesClient({
         <header className="h-14 sm:h-16 px-3.5 sm:px-6 border-b border-zinc-800 flex items-center justify-between bg-[#181d20] relative z-30 shrink-0 gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
             <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+              onClick={toggleSidebar} 
               className={`p-2 sm:p-1.5 rounded-xl text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 transition-colors ${isSidebarOpen ? 'bg-zinc-800 text-blue-400' : ''}`}
               title={isSidebarOpen ? "Ẩn danh mục" : "Hiện danh mục"}
             >
